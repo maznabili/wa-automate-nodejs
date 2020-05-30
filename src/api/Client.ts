@@ -12,6 +12,13 @@ import { ParticipantChangedEventModel } from './model/group-metadata';
 import { useragent } from '../config/puppeteer.config'
 import sharp from 'sharp';
 
+enum namespace {
+  Chat = 'Chat',
+  Msg = 'Msg',
+  Contact = 'Contact',
+  GroupMetadata = 'GroupMetadata'
+}
+
 export const getBase64 = async (url: string, optionsOverride: any = {} ) => {
   try {
     const res = await axios({
@@ -60,6 +67,7 @@ declare module WAPI {
   const onParticipantsChanged: (groupId: string, callback: Function) => any;
   const _onParticipantsChanged: (groupId: string, callback: Function) => any;
   const onLiveLocation: (chatId: string, callback: Function) => any;
+  const getSingleProperty: (namespace: string, id: string, property : string) => any;
   const sendMessage: (to: string, content: string) => Promise<string>;
   const downloadFileWithCredentials: (url: string) => Promise<string>;
   const sendMessageWithMentions: (to: string, content: string) => Promise<string>;
@@ -461,7 +469,9 @@ export class Client {
 
 
   /**
-   * @event Fires callback with Chat object every time the host phone is added to a group.
+   * Fires callback with Chat object every time the host phone is added to a group.
+   * 
+   * @event 
    * @param to callback
    * @returns Observable stream of Chats
    */
@@ -482,7 +492,9 @@ export class Client {
   /**
    * [REQUIRES AN INSIDERS LICENSE-KEY](https://gumroad.com/l/BTMt)
    * 
-   * @event Fires callback with Chat object every time the host phone is added to a group.
+   * Fires callback with Chat object every time the host phone is added to a group.
+   * 
+   * @event 
    * @param to callback
    * @returns Observable stream of Chats
    */
@@ -502,7 +514,31 @@ export class Client {
   /**
    * [REQUIRES AN INSIDERS LICENSE-KEY](https://gumroad.com/l/BTMt)
    * 
-   * @event Fires callback with contact id when a new contact is added on the host phone.
+   * Fires callback with the relevant chat id every time the user clicks on a chat. This will only work in headful mode.
+   * 
+   * @event 
+   * @param to callback
+   * @returns Observable stream of Chat ids.
+   */
+  public onChatOpened(fn: (chat: Chat) => any) {
+    const funcName = "onChatOpened";
+    return this.page.exposeFunction(funcName, (chat: any) =>
+      fn(chat)
+    )
+      .then(_ => this.page.evaluate(
+        () => {
+        //@ts-ignore
+          WAPI.onChatOpened(window.onChatOpened);
+        }
+      ));
+  }
+
+  /**
+   * [REQUIRES AN INSIDERS LICENSE-KEY](https://gumroad.com/l/BTMt)
+   * 
+   * Fires callback with contact id when a new contact is added on the host phone.
+   * 
+   * @event 
    * @param to callback
    * @returns Observable stream of contact ids
    */
@@ -1399,7 +1435,7 @@ public async getStatus(contactId: string) {
    * @returns list of messages
    */
   public async getAllUnreadMessages() {
-    return JSON.parse(await this.page.evaluate(() => WAPI.getAllUnreadMessages()));
+    return await this.page.evaluate(() => WAPI.getAllUnreadMessages());
   }
 
   /**
@@ -1644,6 +1680,27 @@ public async getStatus(contactId: string) {
        console.log('Something went wrong', error);
        return error;
      }
+  }
+
+  /**
+   * This allows you to get a single property of a single object from the session. This limints the amouunt of data you need to sift through, reduces congestion between your process and the session and the flexibility to build your own specific getters.
+   * 
+   * Example - get message read state (ack):
+   * 
+   * ```javascript
+   * const ack  = await client.getSingleProperty('Msg',"true_12345678912@c.us_9C4D0965EA5C09D591334AB6BDB07FEB",'ack')
+   * ```
+   * @param namespace
+   * @param id id of the object to get from the specific namespace
+   * @param property the single property key to get from the object.
+   * @returns any If the property or the id cannot be found, it will return a 404
+   */
+  public async getSingleProperty(namespace: namespace, id: string, property : string) {
+    return await this.page.evaluate(
+      ({ namespace, id, property }) => WAPI.getSingleProperty(namespace, id, property),
+      { namespace, id, property }
+    );
+
   }
 
   public async injectJsSha(){

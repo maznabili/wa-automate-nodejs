@@ -167,6 +167,11 @@ window.WAPI._serializeMessageObj = (obj) => {
     if(obj.quotedMsg) obj.quotedMsgObj();
     return Object.assign(window.WAPI._serializeRawObj(obj), {
         id: obj.id._serialized,
+        from: obj.from._serialized,
+        quotedParticipant: obj.quotedParticipant? obj.quotedParticipant._serialized ? obj.quotedParticipant._serialized : undefined : undefined,
+        author: obj.author? obj.author._serialized ? obj.author._serialized : undefined : undefined,
+        chatId: obj.chatId? obj.chatId._serialized ? obj.chatId._serialized : undefined : undefined,
+        to: obj.to? obj.to._serialized ? obj.to._serialized : undefined : undefined,
         fromMe: obj.id.fromMe,
         sender: obj["senderObj"] ? WAPI._serializeContactObj(obj["senderObj"]) : null,
         timestamp: obj["t"],
@@ -294,13 +299,18 @@ window.WAPI.getAllNewMessages = async function () {
     return JSON.stringify(WAPI.getAllChatsWithNewMsg().map(c => WAPI.getChat(c.id._serialized)).map(c => c.msgs._models.filter(x => x.isNewMsg)) || [])
 }
 
-// x.ack==-1
+// nnoo longer determined by x.ack==-1
 window.WAPI.getAllUnreadMessages = async function () {
-    return JSON.stringify(WAPI.getAllChatsWithNewMsg().map(c => WAPI.getChat(c.id._serialized)).map(c => c.msgs._models.filter(x => x.ack == -1)).flatMap(x => x) || [])
+    return Store.Chat.models.filter(chat=>chat.unreadCount&&chat.unreadCount>0).map(unreadChat=>unreadChat.msgs.models.slice(-1*unreadChat.unreadCount)).flat().map(WAPI._serializeMessageObj)
 }
 
 window.WAPI.getIndicatedNewMessages = async function () {
     return JSON.stringify(Store.Chat.models.filter(chat=>chat.unreadCount).map(chat=>{return {id:chat.id,indicatedNewMessages: chat.msgs.models.slice(Math.max(chat.msgs.length - chat.unreadCount, 0)).filter(msg=>!msg.id.fromMe)}}))
+}
+
+window.WAPI.getSingleProperty = function (namespace,id,property){
+    if(Store[namespace] && Store[namespace].get(id) && Object.keys(Store[namespace].get(id)).find(x=>x.includes(property))) return Store[namespace].get(id)[property];
+    return 404
 }
 
 window.WAPI.getAllChatsWithMessages = async function (onlyNew) {
@@ -2144,6 +2154,7 @@ window.WAPI.clearAllChats = function(){return false;}
 window.WAPI.getCommonGroups = function(){return false;}
 window.WAPI.setChatBackgroundColourHex = function(){return false;}
 window.WAPI.darkMode = function(){return false;}
+window.WAPI.onChatOpened = function(){return false;}
 
 window.WAPI.quickClean = function (ob) {return JSON.parse(JSON.stringify(ob))};
 
