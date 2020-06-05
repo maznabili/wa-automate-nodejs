@@ -12,7 +12,7 @@ if (!window.Store||!window.Store.Msg) {
         function getStore(modules) {
             let foundCount = 0;
             let neededObjects = [
-                { id: "Store", conditions: (module) => (module.Chat && module.Msg) ? module : null },
+                { id: "Store", conditions: (module) => (module.default && module.default.Chat && module.default.Msg) ? module.default : null},
                 { id: "MediaCollection", conditions: (module) => (module.default && module.default.prototype && (module.default.prototype.processFiles !== undefined||module.default.prototype.processAttachments !== undefined)) ? module.default : null },
                 { id: "MediaProcess", conditions: (module) => (module.BLOB) ? module : null },
                 { id: "Archive", conditions: (module) => (module.setArchive) ? module : null },
@@ -2155,6 +2155,7 @@ window.WAPI.getCommonGroups = function(){return false;}
 window.WAPI.setChatBackgroundColourHex = function(){return false;}
 window.WAPI.darkMode = function(){return false;}
 window.WAPI.onChatOpened = function(){return false;}
+window.WAPI.onStory = function(){return false;}
 
 window.WAPI.quickClean = function (ob) {return JSON.parse(JSON.stringify(ob))};
 
