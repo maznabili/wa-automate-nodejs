@@ -22,7 +22,7 @@ if (!window.Store||!window.Store.Msg) {
                 { id: "Wap", conditions: (module) => (module.createGroup) ? module : null },
                 { id: "ServiceWorker", conditions: (module) => (module.default && module.default.killServiceWorker) ? module : null },
                 { id: "State", conditions: (module) => (module.STATE && module.STREAM) ? module : null },
-                { id: "Presence", conditions: (module) => (module.setPresenceAvailable && module.setPresenceUnavailable) ? module : null },
+                { id: "_Presence", conditions: (module) => (module.setPresenceAvailable && module.setPresenceUnavailable) ? module : null },
                 { id: "WapDelete", conditions: (module) => (module.sendConversationDelete && module.sendConversationDelete.length == 2) ? module : null },
                 { id: "Conn", conditions: (module) => (module.default && module.default.ref && module.default.refTTL) ? module.default : null },
                 { id: "WapQuery", conditions: (module) => (module.queryExist) ? module : ((module.default && module.default.queryExist) ? module.default : null) },
@@ -52,7 +52,6 @@ if (!window.Store||!window.Store.Msg) {
                 { id: "Participants", conditions: (module) => (module.addParticipants && module.removeParticipants && module.promoteParticipants && module.demoteParticipants) ? module : null },
                 { id: "WidFactory", conditions: (module) => (module.isWidlike && module.createWid && module.createWidFromWidLike) ? module : null },
                 { id: "Base", conditions: (module) => (module.setSubProtocol && module.binSend && module.actionNode) ? module : null },
-                { id: "Base2", conditions: (module) => (module.supportsFeatureFlags && module.parseMsgStubProto && module.binSend && module.subscribeLiveLocation) ? module : null },
                 { id: "Versions", conditions: (module) => (module.loadProtoVersions && module.default["15"] && module.default["16"] && module.default["17"]) ? module : null },
 		        { id: "Sticker", conditions: (module) => (module.default && module.default.Sticker) ? module.default.Sticker : null },
                 { id: "MediaUpload", conditions: (module) => (module.default && module.default.mediaUpload) ? module.default : null },
@@ -871,8 +870,8 @@ function isChatMessage(message) {
 }
 
 window.WAPI.setPresence = function (available) {
-    if(available)Store.Presence.setPresenceAvailable();
-    else Store.Presence.setPresenceUnavailable();
+    if(available)Store._Presence.setPresenceAvailable();
+    else Store._Presence.setPresenceUnavailable();
 }
 
 window.WAPI.getUnreadMessages = function (includeMe, includeNotifications, use_unread_count) {
@@ -1634,7 +1633,7 @@ window.WAPI.sendImageWithProduct = async function (imgBase64, chatid, caption, b
 window.WAPI.base64ImageToFile = function (b64Data, filename) {
     var arr = b64Data.split(',');
     var mime = arr[0].match(/:(.*?);/)[1];
-    var bstr = Base64 ? Base64.atob(arr[1]) : atob(arr[1]);
+    var bstr = window.Base64 ? window.Base64.atob(arr[1]) : atob(arr[1]);
     var n = bstr.length;
     var u8arr = new Uint8Array(n);
 
