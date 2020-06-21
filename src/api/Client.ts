@@ -454,7 +454,7 @@ export class Client {
     console.log('Shutting Down');
     try{
       if (this.page && !this.page.isClosed()) await this.page.close();
-      if (this.page && !this.page.isClosed() && this.page.browser) await this.page.browser().close();
+      if (this.page && this.page.browser) await this.page.browser().close();
     } catch(error){}
     return true;
   }
@@ -1504,7 +1504,7 @@ public async getStatus(contactId: string) {
    * @returns list of messages
    */
   public async getAllNewMessages() {
-    return JSON.parse(await this.page.evaluate(() => WAPI.getAllNewMessages()));
+    return await this.page.evaluate(() => WAPI.getAllNewMessages());
   }
 
   /**
