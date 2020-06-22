@@ -193,6 +193,7 @@ declare module WAPI {
   const getAllChatsWithNewMsg: () => Chat[];
   const getAllNewMessages: () => any;
   const getUseHereString: () => Promise<string>;
+  const getHostNumber: () => string;
   const getAllGroups: () => Chat[];
   const getGroupParticipantIDs: (groupId: string) => Promise<string[]>;
   const joinGroupViaLink: (link: string) => Promise<string | boolean>;
@@ -1117,6 +1118,14 @@ export class Client {
    */
   public async getIsPlugged() {
     return await this.page.evaluate(() => WAPI.getIsPlugged());
+  }
+
+  /**
+   * Retrieves the host device number. Use this number when registering for a license key
+   * @returns Number
+   */
+  public async getHostNumber() {
+    return await this.page.evaluate(() => WAPI.getHostNumber());
   }
 
   /**
