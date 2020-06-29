@@ -10,10 +10,12 @@ import { logoText, integrityCheck } from './launch_checks';
 const updateNotifier = require('update-notifier');
 let shouldLoop = true;
 var pkg = require('../../package.json');
+export const {licenseCheckUrl} = pkg;
 const timeout = ms => {
   return new Promise(resolve => setTimeout(resolve, ms, 'timeout'));
 }
 let qrDelayTimeout;
+import treekill from 'tree-kill';
 
 /**
  * Should be called to initialize whatsapp client.
@@ -97,9 +99,9 @@ export async function create(sessionId?: any | ConfigObject, config?: ConfigObje
     if (authenticated == 'timeout') {
       const outOfReach = await phoneIsOutOfReach(waPage);
       spinner.emit(outOfReach ? 'appOffline' : 'authTimeout');
-      spinner.fail(outOfReach ? 'Authentication timed out. Please open the app on the phone. Shutting down' : 'Authentication timed out. Shutting down');
+      spinner.fail(outOfReach ? 'Authentication timed out. Please open the app on the phone. Shutting down' : 'Authentication timed out. Shutting down. Consider increasing authTimeout config variable: https://open-wa.github.io/wa-automate-nodejs/interfaces/configobject.html#authtimeout');
       await kill(waPage);
-      throw new Error(outOfReach ? 'App Offline' : 'Auth Timeout');
+      throw new Error(outOfReach ? 'App Offline' : 'Auth Timeout. Consider increasing authTimeout config variable: https://open-wa.github.io/wa-automate-nodejs/interfaces/configobject.html#authtimeout');
     }
 
     let autoRefresh = config ? config.autoRefresh : false;
@@ -131,7 +133,7 @@ export async function create(sessionId?: any | ConfigObject, config?: ConfigObje
       const result = await Promise.race(race);
       if (result == 'timeout') {
         spinner.emit('qrTimeout');
-        spinner.fail('Session timed out. Shutting down');
+        spinner.fail('QR scan took too long. Session Timed Out. Shutting down. Consider increasing qrTimeout config variable: https://open-wa.github.io/wa-automate-nodejs/interfaces/configobject.html#qrtimeout');
         await kill(waPage);
         throw new Error('QR Timeout');
       }
@@ -148,7 +150,7 @@ export async function create(sessionId?: any | ConfigObject, config?: ConfigObje
     if (canInjectEarly) {
       //check if page is valid after 5 seconds
       spinner.start('Checking if session is valid');
-      await timeout(5000);
+      if(config?.safeMode) await timeout(5000);
     }
     //@ts-ignore
     const VALID_SESSION = await waPage.evaluate(() => window.Store && window.Store.Msg ? true : false);
@@ -179,7 +181,7 @@ export async function create(sessionId?: any | ConfigObject, config?: ConfigObje
       });
 
       if (config?.skipBrokenMethodsCheck !== true) await integrityCheck(waPage, notifier, spinner, debugInfo);
-      const client = new Client(waPage, config);
+      const client = new Client(waPage, config, debugInfo);
       if (config?.licenseKey) {
         spinner.start('Checking License')
         const { me } = await client.getMe();
@@ -210,7 +212,9 @@ const kill = async (p) => {
   if (qrDelayTimeout) clearTimeout(qrDelayTimeout);
   if (p) {
     const browser = await p.browser();
+    const {pid} = browser.process();
     if (!p.isClosed()) await p.close();
     if (browser) await browser.close();
+    treekill(pid, 'SIGKILL')
   }
 }

@@ -11,7 +11,7 @@ let globalClient:Client;
 const express = require('express')
 
 const app = express()
-app.use(express.json())
+app.use(express.json({limit: '200mb'})) //add the limit option so we can send base64 data through the api
 
 const PORT = 8082;
 
@@ -73,7 +73,7 @@ app.listen(PORT, function () {
   //Returns 'CONNECTED' or 'TIMEOUT' or 'CONFLICT' (if user opens whatsapp web somewhere else)
   client.onStateChanged(state=>{
     console.log('statechanged', state)
-    if(state==="CONFLICT") client.forceRefocus();
+    if(state==="CONFLICT" || state==="UNLAUNCHED") client.forceRefocus();
   });
 
   // setTimeout(_=> client.kill(), 3000);
@@ -94,6 +94,7 @@ app.listen(PORT, function () {
     if (message.mimetype) {
       const filename = `${message.t}.${mime.extension(message.mimetype)}`;
       const mediaData = await decryptMedia(message, uaOverride);
+
       // you can send a file also with sendImage or await client.sendFile
       // await client.sendImage(
       //   message.from,
@@ -169,6 +170,7 @@ create({
   killProcessOnBrowserClose: true,
   autoRefresh:true, //default to true
   qrRefreshS:15, //please note that if this is too long then your qr code scan may end up being invalid. Generally qr codes expire every 15 seconds.
+  safeMode: true
   // cacheEnabled:false,
   // devtools:true,
   //OR

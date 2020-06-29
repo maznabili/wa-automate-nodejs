@@ -469,6 +469,10 @@ window.WAPI.getGroupInviteLink = async function (chatId) {
     return `https://chat.whatsapp.com/${chat.inviteCode}`
 }
 
+window.WAPI.inviteInfo = async function(link){
+    return await Store.WapQuery.groupInviteInfo(link.split('\/').pop()).then(r=>r.status===200?WAPI.quickClean(r):r.status);
+}
+
 window.WAPI.getNewId = function () {
     var text = "";
     var possible = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
@@ -653,6 +657,10 @@ window.WAPI.getGroupAdmins = async function (id) {
         .map((admin) => admin.id._serialized);
 };
 
+WAPI.iAmAdmin = async function(){
+    return (await Promise.all(Store.GroupMetadata.models.map(({id})=>Store.GroupMetadata.find(id)))).filter(({participants})=>participants.iAmAdmin()||participants.iAmSuperAdmin()).map(({id})=>id._serialized);
+}
+
 /**
  * Returns an object with all of your host device details
  */
@@ -706,11 +714,11 @@ window.WAPI.getAllMessagesInChat = function (id, includeMe, includeNotifications
         }
         const messageObj = messages[i];
 
-        let message = WAPI.processMessageObj(messageObj, includeMe, includeNotifications)
+        let message = WAPI.quickClean(WAPI.processMessageObj(messageObj, includeMe, includeNotifications))
         if (message)
             output.push(message);
     }
-    return WAPI.quickClean(output);
+    return output;
 };
 
 window.WAPI.loadAndGetAllMessagesInChat = function (id, includeMe, includeNotifications) {
@@ -1224,7 +1232,7 @@ window.WAPI.addAllNewMessagesListener = callback => window.Store.Msg.on('add', (
         };
         Store.Msg.on('change:isUnsentMedia',cb);
     } else {
-        let message = window.WAPI.processMessageObj(newMessage, true, false);
+        let message = WAPI.quickClean(window.WAPI.processMessageObj(newMessage, true, false) || newMessage.attributes);
         if (message) {
             callback(message)
         }
@@ -1237,8 +1245,27 @@ window.WAPI.addAllNewMessagesListener = callback => window.Store.Msg.on('add', (
  * @returns {boolean}
  */
 window.WAPI.onStateChanged = function (callback) {
-    window.Store.State.default.on('change:state', callback)
+    window.Store.State.default.on('change:state', ({state})=>callback(state))
     return true;
+}
+
+/**
+ * Returns the current state of the session. Possible state values:
+ * "CONFLICT"
+ * "CONNECTED"
+ * "DEPRECATED_VERSION"
+ * "OPENING"
+ * "PAIRING"
+ * "PROXYBLOCK"
+ * "SMB_TOS_BLOCK"
+ * "TIMEOUT"
+ * "TOS_BLOCK"
+ * "UNLAUNCHED"
+ * "UNPAIRED"
+ * "UNPAIRED_IDLE"
+ */
+window.WAPI.getState = function (){
+    return Store.State.default.state;
 }
 
 /**
@@ -1487,6 +1514,7 @@ window.WAPI.getBufferedNewMessages = function () {
  * @returns Promise<string | boolean> Either false if it didn't work, or the group id.
  */
 window.WAPI.joinGroupViaLink = async function(link){
+    return await Store.WapQuery.acceptGroupInvite(link.split('\/').pop()).then(res=>res.status===200?res.gid._serialized:res.status);
     let code = link;
     //is it a link? if not, assume it's a code, otherwise, process the link to get the code.
     if(link.includes('chat.whatsapp.com')) {
@@ -2159,6 +2187,10 @@ window.WAPI.getUseHereString = async function() {
     return Store.Msg.models.length;
 }
 
+WAPI.getChatWithNonContacts = async function(){
+    return Store.Chat.models.map(chat=>chat.contact && !chat.contact.isMyContact ?chat.contact :null).filter(x=>x && !x.isGroup).map(WAPI._serializeContactObj)
+}
+
 window.WAPI.cutMsgCache = function (){
     Store.Msg.models.map(msg=>Store.Msg.remove(msg));
     return true;
@@ -2187,8 +2219,18 @@ window.WAPI.setChatBackgroundColourHex = function(){return false;}
 window.WAPI.darkMode = function(){return false;}
 window.WAPI.onChatOpened = function(){return false;}
 window.WAPI.onStory = function(){return false;}
+window.WAPI.getStoryViewers = function(){return false;}
+window.WAPI.onChatState = function(){return false;}
 
-window.WAPI.quickClean = function (ob) {return JSON.parse(JSON.stringify(ob))};
+window.WAPI.quickClean = function (ob) {
+    var r = JSON.parse(JSON.stringify(ob));
+    if(r.mediaData && Object.keys(r.mediaData).length==0) delete r.mediaData;
+    if(r.chat && Object.keys(r.chat).length==0) delete r.chat;
+    Object.keys(r).filter(k=>r[k]==""||r[k]==[]||r[k]=={}||r[k]==null).forEach(k=>delete r[k]);
+    Object.keys(r).filter(k=>r[k]?r[k].id:false).forEach(k=>r[k]=r[k].id);
+    Object.keys(r).filter(k=>r[k]?r[k]._serialized:false).forEach(k=>r[k]=r[k]._serialized);
+    return r;
+};
 
 window.WAPI.pyFunc = async function (fn, done) {
     return done(await fn())
