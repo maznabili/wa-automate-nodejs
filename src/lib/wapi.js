@@ -703,22 +703,12 @@ window.WAPI.processMessageObj = function (messageObj, includeMe, includeNotifica
     return;
 };
 
-window.WAPI.getAllMessagesInChat = function (id, includeMe, includeNotifications) {
+window.WAPI.getAllMessagesInChat = function (id, includeMe = false, includeNotifications = false) {
     const chat = WAPI.getChat(id);
-    let output = [];
-    const messages = chat.msgs._models;
-
-    for (const i in messages) {
-        if (i === "remove") {
-            continue;
-        }
-        const messageObj = messages[i];
-
-        let message = WAPI.quickClean(WAPI.processMessageObj(messageObj, includeMe, includeNotifications))
-        if (message)
-            output.push(message);
-    }
-    return output;
+    let output = chat.msgs._models || [];
+    if(!includeMe) output =  output.filter(m=> !m.id.fromMe)
+    if(!includeNotifications) output = output.filter(m=> !m.isNotification)
+    return output.map(WAPI.quickClean) || [];
 };
 
 window.WAPI.loadAndGetAllMessagesInChat = function (id, includeMe, includeNotifications) {
@@ -820,12 +810,12 @@ window.WAPI.sendMessageReturnId = async function (ch, body) {
 
 
 window.WAPI.sendMessage = async function (id, message) {
-    if(id==='status@broadcast') return false;
+    if(id==='status@broadcast') return 'Not able to send message to broadcast';
     let chat = WAPI.getChat(id);
-    if(!chat && !id.includes('g')) {
+    if((!chat && !id.includes('g') || chat.msgs.models.length == 0)) {
         var contact = WAPI.getContact(id)
-        if(!contact) return false;
-        await Store.Chat.find(contact.id)
+        if(!contact || !contact.isMyContact) return 'Not a contact';
+        await Store.Chat.find(Store.Contact.get(id).id)
         chat = WAPI.getChat(id);
     }
     if (chat !== undefined) {
@@ -1171,7 +1161,7 @@ window._WAPI._newMessagesListener = window.Store.Msg.on('add', (newMessage) => {
 
                 window._WAPI._newMessagesCallbacks.forEach(function (callbackObj) {
                     if (callbackObj.callback !== undefined) {
-                        callbackObj.callback(queuedMessages);
+                        callbackObj.callback(JSON.parse(JSON.stringify(queuedMessages)));
                     }
                     if (callbackObj.rmAfterUse === true) {
                         removeCallbacks.push(callbackObj);
@@ -1221,7 +1211,7 @@ window.WAPI.waitNewMessages = function (rmCallbackAfterUse = true, callback) {
 };
 
 
-window.WAPI.addAllNewMessagesListener = callback => window.Store.Msg.on('add', (newMessage) => {
+window.WAPI.onAnyMessage = callback => window.Store.Msg.on('add', (newMessage) => {
     if (newMessage && newMessage.isNewMsg) {
     if(!newMessage.clientUrl && (newMessage.mediaKeyTimestamp || newMessage.filehash)){
         const cb = (msg) => {
@@ -1232,7 +1222,8 @@ window.WAPI.addAllNewMessagesListener = callback => window.Store.Msg.on('add', (
         };
         Store.Msg.on('change:isUnsentMedia',cb);
     } else {
-        let message = WAPI.quickClean(window.WAPI.processMessageObj(newMessage, true, false) || newMessage.attributes);
+        let pm = window.WAPI.processMessageObj(newMessage, true, true);
+        let message = pm? JSON.parse(JSON.stringify(pm)) : WAPI.quickClean(newMessage.attributes);
         if (message) {
             callback(message)
         }
@@ -1297,8 +1288,8 @@ window.WAPI.addOrRemoveLabels = async function (label, objectId, type) {
  * @param callback - function - Callback function to be called when a message acknowledgement changes.
  * @returns {boolean}
  */
-window.WAPI.waitNewAcknowledgements = function (callback) {
-    Store.Msg.on("change:ack", callback);
+window.WAPI.onAck = function (callback) {
+    Store.Msg.on("change:ack", m=>callback(WAPI.quickClean(m)));
     return true;
 }
 
@@ -1621,11 +1612,15 @@ window.WAPI.refreshBusinessProfileProducts = async function (){
  * @returns None
  */
 window.WAPI.getBusinessProfilesProducts = async function (id) {
-    await WAPI.refreshBusinessProfileProducts();
-    if(!Store.Catalog.get(id)) await Store.Catalog.findCarouselCatalog(id)
-    const catalog = Store.Catalog.get(id);
-    if (catalog.productCollection && catalog.productCollection._models.length)
-    return catalog.productCollection._models;
+    try{
+        if(!Store.Catalog.get(id)) await Store.Catalog.findCarouselCatalog(id)
+        const catalog = Store.Catalog.get(id);
+        if (catalog.productCollection && catalog.productCollection._models.length)
+        return JSON.parse(JSON.stringify(catalog.productCollection._models));
+        else return [];
+    } catch(error){
+        return false;
+    }
 };
 
 
@@ -2227,8 +2222,8 @@ window.WAPI.quickClean = function (ob) {
     if(r.mediaData && Object.keys(r.mediaData).length==0) delete r.mediaData;
     if(r.chat && Object.keys(r.chat).length==0) delete r.chat;
     Object.keys(r).filter(k=>r[k]==""||r[k]==[]||r[k]=={}||r[k]==null).forEach(k=>delete r[k]);
-    Object.keys(r).filter(k=>r[k]?r[k].id:false).forEach(k=>r[k]=r[k].id);
     Object.keys(r).filter(k=>r[k]?r[k]._serialized:false).forEach(k=>r[k]=r[k]._serialized);
+    Object.keys(r).filter(k=>r[k]?r[k].id:false).forEach(k=>r[k]=r[k].id);
     return r;
 };
 

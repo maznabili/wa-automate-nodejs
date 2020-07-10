@@ -265,6 +265,14 @@ export interface ConfigObject {
      * If true, client will check if the page is valid before each command. If page is not valid, it will throw an error.
      */
     safeMode ?: boolean;
+    /**
+     * If true, the process will not save a data.json file. This means that sessions will not be saved and you will need to pass sessionData as a config param or create the session data.json file yourself
+     */
+    skipSessionSave ?: boolean;
+    /**
+     * If true, the process will open a browser window where you will see basic event logs and QR codes to authenticate the session. Usually it will open on port 3000. It can also be set to a preferred port.
+     */
+    popup ?: boolean | number;
     // @private
     [x: string]: any 
 }
