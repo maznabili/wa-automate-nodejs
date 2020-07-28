@@ -4,7 +4,7 @@ import * as path from 'path';
 const fs = require('fs');
 import { isAuthenticated, isInsideChat, retrieveQR, phoneIsOutOfReach } from './auth';
 import { initClient, injectApi } from './browser';
-import { Spin } from './events'
+import { Spin, ev } from './events'
 import axios from 'axios';
 import { integrityCheck } from './launch_checks';
 const updateNotifier = require('update-notifier');
@@ -18,7 +18,10 @@ let qrDelayTimeout;
 import treekill from 'tree-kill';
 import CFonts from 'cfonts';
 import { popup } from './popup';
+import { getConfigFromProcessEnv } from '../utils/configSchema';
+import { SessionInfo } from '../api/model/sessionInfo';
 const boxen = require('boxen');
+const configWithCases = require('../../bin/config-schema.json');
 
 /**
  * Should be called to initialize whatsapp client.
@@ -41,6 +44,7 @@ const boxen = require('boxen');
 //export async function create(sessionId?: string, config?:ConfigObject, customUserAgent?:string) {
 //@ts-ignore
 export async function create(sessionId?: any | ConfigObject, config?: ConfigObject, customUserAgent?: string): Promise<Client> {
+  const START_TIME = Date.now();
   let waPage = undefined;
   const notifier = await updateNotifier({
     pkg,
@@ -53,6 +57,14 @@ export async function create(sessionId?: any | ConfigObject, config?: ConfigObje
     config = sessionId;
     sessionId = config.sessionId;
     customUserAgent = config.customUserAgent;
+  }
+
+  if(config?.inDocker) {
+    //try to infer config variables from process.env
+    config = {
+      ...config,
+      ...getConfigFromProcessEnv(configWithCases)
+  }
   }
 
   const prettyFont = CFonts.render(('@OPEN-WA|WHATSAPP|AUTOMATOR'), {
@@ -79,9 +91,10 @@ export async function create(sessionId?: any | ConfigObject, config?: ConfigObje
   try {
     qrDelayTimeout = undefined;
     shouldLoop = true;
+    ev.on('AUTH.**', (isAuthenticated, sessionId) => shouldLoop = false);
     spinner.start('Initializing WA');
     waPage = await initClient(sessionId, config, customUserAgent);
-    spinner.succeed();
+    spinner.succeed('Browser Launched');
     const throwOnError = config && config.throwErrorOnTosBlock == true;
 
     const PAGE_UA = await waPage.evaluate('navigator.userAgent');
@@ -92,13 +105,12 @@ export async function create(sessionId?: any | ConfigObject, config?: ConfigObje
     const WA_VERSION = await waPage.evaluate(() => window.Debug ? window.Debug.VERSION : 'I think you have been TOS_BLOCKed')
     //@ts-ignore
     const canInjectEarly = await waPage.evaluate(() => { return (typeof webpackJsonp !== "undefined") });
-    const debugInfo = {
+    let debugInfo : SessionInfo = {
       WA_VERSION,
       PAGE_UA,
       WA_AUTOMATE_VERSION,
       BROWSER_VERSION,
     };
-    spinner.emit(debugInfo, "DebugInfo");
     console.table(debugInfo);
 
     if (canInjectEarly) {
@@ -133,7 +145,7 @@ export async function create(sessionId?: any | ConfigObject, config?: ConfigObje
     const qrLoop = async () => {
       if (!shouldLoop) return;
       console.log(' ')
-      await retrieveQR(waPage, sessionId, autoRefresh, throwOnError, qrLogSkip);
+      await retrieveQR(waPage, sessionId, autoRefresh, throwOnError, qrLogSkip, config?.qrFormat, config?.qrQuality);
       console.log(' ')
       qrDelayTimeout = timeout((config ? (config.qrRefreshS || 10) : 10) * 1000);
       await qrDelayTimeout;
@@ -182,7 +194,7 @@ export async function create(sessionId?: any | ConfigObject, config?: ConfigObje
       const localStorage = JSON.parse(await waPage.evaluate(() => {
         return JSON.stringify(window.localStorage);
       }));
-      const sessionjsonpath = path.join(path.resolve(process.cwd(),config?.sessionDataPath || ''), `${sessionId || 'session'}.data.json`);
+      const sessionjsonpath = (config?.sessionDataPath && config?.sessionDataPath.includes('.data.json')) ? path.join(path.resolve(process.cwd(),config?.sessionDataPath || '')) : path.join(path.resolve(process.cwd(),config?.sessionDataPath || ''), `${sessionId || 'session'}.data.json`);
       const sessionData = {
         WABrowserId: localStorage.WABrowserId,
         WASecretBundle: localStorage.WASecretBundle,
@@ -204,6 +216,10 @@ export async function create(sessionId?: any | ConfigObject, config?: ConfigObje
       });
 
       if (config?.skipBrokenMethodsCheck !== true) await integrityCheck(waPage, notifier, spinner, debugInfo);
+      const LAUNCH_TIME_MS = Date.now() - START_TIME;
+      debugInfo = {...debugInfo, LAUNCH_TIME_MS};
+      spinner.emit(debugInfo, "DebugInfo");
+      spinner.succeed(`Client loaded in ${LAUNCH_TIME_MS/1000}s`);
       const client = new Client(waPage, config, debugInfo);
       if (config?.licenseKey) {
         spinner.start('Checking License')

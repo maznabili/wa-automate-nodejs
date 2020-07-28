@@ -2,7 +2,8 @@ import * as puppeteer from 'puppeteer';
 import * as qrcode from 'qrcode-terminal';
 import { from, merge } from 'rxjs';
 import { take } from 'rxjs/operators';
-import {EvEmitter} from './events'
+import {EvEmitter, ev} from './events'
+import { QRFormat, QRQuality } from '../api/model';
 
 /**
  * Validates if client is authenticated
@@ -25,7 +26,7 @@ export const isInsideChat = (waPage: puppeteer.Page) => {
   return from(
     waPage
       .waitForFunction(
-        "(document.getElementsByClassName('app')[0] && document.getElementsByClassName('app')[0].attributes && !!document.getElementsByClassName('app')[0].attributes.tabindex) || (document.getElementsByClassName('two')[0] && document.getElementsByClassName('two')[0].attributes && !!document.getElementsByClassName('two')[0].attributes.tabindex)",
+        "!!window.WA_AUTHENTICATED || (document.getElementsByClassName('app')[0] && document.getElementsByClassName('app')[0].attributes && !!document.getElementsByClassName('app')[0].attributes.tabindex) || (document.getElementsByClassName('two')[0] && document.getElementsByClassName('two')[0].attributes && !!document.getElementsByClassName('two')[0].attributes.tabindex)",
         { timeout: 0 }
       )
       .then(() => true)
@@ -43,8 +44,14 @@ export const phoneIsOutOfReach = async (waPage: puppeteer.Page) => {
     //@ts-ignore
 const checkIfCanAutoRefresh = (waPage: puppeteer.Page) => waPage.evaluate(() => {if(window.Store && window.Store.State) {window.Store.State.default.state="UNPAIRED";window.Store.State.default.run();return true;} else {return false;}})
 
-export async function retrieveQR(waPage: puppeteer.Page, sessionId?:string, autoRefresh:boolean=false,throwErrorOnTosBlock:boolean=false, qrLogSkip: boolean = false) {
+export async function retrieveQR(waPage: puppeteer.Page, sessionId?:string, autoRefresh:boolean=false,throwErrorOnTosBlock:boolean=false, qrLogSkip: boolean = false, format: QRFormat = QRFormat.PNG, quality: QRQuality = QRQuality.TEN) {
+  
+  let keepTrying = true
+  
+  ev.on('AUTH.**', (isAuthenticated, sessionId) => (keepTrying = false));
+  
   const qrEv = new EvEmitter(sessionId,'qr');
+
   if (autoRefresh) {
     const evalResult = await checkIfCanAutoRefresh(waPage)
     if (evalResult === false) {
@@ -53,7 +60,7 @@ export async function retrieveQR(waPage: puppeteer.Page, sessionId?:string, auto
     }
   }
   let targetElementFound;
-  while (!targetElementFound) {
+  while (!targetElementFound && keepTrying) {
     try {
       targetElementFound = await waPage.waitForSelector( "canvas[aria-label='Scan me!']",{
         timeout: 10000,
@@ -61,11 +68,14 @@ export async function retrieveQR(waPage: puppeteer.Page, sessionId?:string, auto
         });
     } catch(error) {}
   }
+
+  if (!keepTrying) return true;
+
   let qrData;
   while(!qrData){
     qrData = await waPage.evaluate(`document.querySelector("canvas[aria-label='Scan me!']")?document.querySelector("canvas[aria-label='Scan me!']").parentElement.getAttribute("data-ref"):false`);
   }
-  const qrCode = await waPage.evaluate(`document.querySelector("canvas[aria-label='Scan me!']").toDataURL()`);
+  const qrCode = await waPage.evaluate(`document.querySelector("canvas[aria-label='Scan me!']").toDataURL('image/${format}', ${quality})`);
   qrEv.emit(qrCode);
   if(!qrLogSkip) qrcode.generate(qrData,{small: true});
   return true;

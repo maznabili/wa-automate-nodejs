@@ -7,9 +7,10 @@ const StealthPlugin = require('puppeteer-extra-plugin-stealth')
 import { puppeteerConfig, useragent, width, height} from '../config/puppeteer.config';
 //@ts-ignore
 import { Browser, Page } from '@types/puppeteer';
-import { Spin } from './events';
+import { Spin, EvEmitter } from './events';
 import { ConfigObject } from '../api/model';
 const ON_DEATH = require('death'); //this is intentionally ugly
+const useProxy = require('puppeteer-page-proxy');
 let browser;
 
 export async function initClient(sessionId?: string, config?:ConfigObject, customUserAgent?:string) {
@@ -29,17 +30,109 @@ export async function initClient(sessionId?: string, config?:ConfigObject, custo
   const blockCrashLogs = config?.blockCrashLogs === false ? false : true;
   await waPage.setBypassCSP(config?.bypassCSP || false);
   await waPage.setCacheEnabled(cacheEnabled);
-  await waPage.setRequestInterception(true);
-  waPage.on('request', interceptedRequest => {
-    if (interceptedRequest.url().includes('https://crashlogs.whatsapp.net/') && blockCrashLogs){
-      interceptedRequest.abort();
+  const _waPage : any = waPage;
+  // await waPage.setRequestInterception(true);
+  const blockAssets = !config?.headless ? false : config?.blockAssets || false;
+  const interceptAuthentication = !(config?.safeMode);
+  let quickAuthed = false;
+
+  if (blockAssets || blockCrashLogs) {
+    let patterns = [];
+    let authCompleteEv;
+    
+    if (interceptAuthentication) {
+      authCompleteEv = new EvEmitter(sessionId, 'AUTH');
+      patterns.push({ urlPattern: '*_priority_components*' });
     }
-    else
-      interceptedRequest.continue();
+    
+  
+    if (blockCrashLogs) patterns.push({ urlPattern: '*crashlogs' });
+  
+    if (blockAssets) {
+      await _waPage._client.send('Network.enable');
+      _waPage._client.send('Network.setBypassServiceWorker', {
+        bypass: true,
+      });
+  
+      patterns = [
+        ...patterns,
+        ...[
+          { urlPattern: '*.css' },
+          { urlPattern: '*.jpg' },
+          { urlPattern: '*.jpg*' },
+          { urlPattern: '*.jpeg' },
+          { urlPattern: '*.jpeg*' },
+          { urlPattern: '*.webp' },
+          { urlPattern: '*.png' },
+          { urlPattern: '*.mp3' },
+          { urlPattern: '*.svg' },
+          { urlPattern: '*.woff' },
+          { urlPattern: '*.pdf' },
+          { urlPattern: '*.zip' },
+          { urlPattern: '*crashlogs' },
+        ],
+      ];
+    }
+  
+    await _waPage._client.send('Network.setRequestInterception', {
+      patterns,
+    });
+  
+    _waPage._client.on(
+      'Network.requestIntercepted',
+      async ({ interceptionId, request }) => {
+        const extensions = [
+          '.css',
+          '.jpg',
+          '.jpeg',
+          '.webp',
+          '.mp3',
+          '.png',
+          '.svg',
+          '.woff',
+          '.pdf',
+          '.zip',
+        ];
+  
+        const req_extension = path.extname(request.url);
+  
+        if (
+          (blockAssets && extensions.includes(req_extension)) ||
+          request.url.includes('.jpg') ||
+          (blockCrashLogs && request.url.includes('crashlogs'))
+        ) {
+          await (waPage as any)._client.send(
+            'Network.continueInterceptedRequest',
+            {
+              interceptionId,
+              rawResponse: '',
+            }
+          );
+        } else {
+          await (waPage as any)._client.send(
+            'Network.continueInterceptedRequest',
+            {
+              interceptionId,
+            }
+          );
+
+          if (
+            interceptAuthentication &&
+            request.url.includes('_priority_components') &&
+            !quickAuthed
+          ) {
+            authCompleteEv.emit(true);
+            await waPage.evaluate('window.WA_AUTHENTICATED=true;');
+            quickAuthed = true;
+          }
+          
+        }
+      }
+    );
   }
-  );
+
   //check if [session].json exists in __dirname
-  const sessionjsonpath = path.join(path.resolve(process.cwd(),config?.sessionDataPath || ''), `${sessionId || 'session'}.data.json`);
+  const sessionjsonpath = (config?.sessionDataPath && config?.sessionDataPath.includes('.data.json')) ? path.join(path.resolve(process.cwd(),config?.sessionDataPath || '')) : path.join(path.resolve(process.cwd(),config?.sessionDataPath || ''), `${sessionId || 'session'}.data.json`);
   let sessionjson = process.env[`${sessionId.toUpperCase()}_DATA_JSON`] ? JSON.parse(process.env[`${sessionId.toUpperCase()}_DATA_JSON`]) : config?.sessionData;
   if (fs.existsSync(sessionjsonpath)) sessionjson = JSON.parse(fs.readFileSync(sessionjsonpath));
   if(sessionjson) await waPage.evaluateOnNewDocument(
@@ -47,8 +140,19 @@ export async function initClient(sessionId?: string, config?:ConfigObject, custo
         localStorage.clear();
         Object.keys(session).forEach(key=>localStorage.setItem(key,session[key]));
     }, sessionjson);
-    
-  await waPage.goto(puppeteerConfig.WAUrl);
+    if(config?.proxyServerCredentials) {
+      await useProxy(waPage, `${config.proxyServerCredentials?.username && config.proxyServerCredentials?.password ? `${config.proxyServerCredentials.protocol || 
+        config.proxyServerCredentials.address.includes('https') ? 'https' : 
+        config.proxyServerCredentials.address.includes('http') ? 'http' : 
+        config.proxyServerCredentials.address.includes('socks5') ? 'socks5' : 
+        config.proxyServerCredentials.address.includes('socks4') ? 'socks4' : 'http'}://${config.proxyServerCredentials.username}:${config.proxyServerCredentials.password}@${config.proxyServerCredentials.address
+        .replace('https', '')
+        .replace('http', '')
+        .replace('socks5', '')
+        .replace('socks4', '')
+        .replace('://', '')}` : config.proxyServerCredentials.address}`);
+    }
+  await waPage.goto(puppeteerConfig.WAUrl)
   return waPage;
 }
 
@@ -66,8 +170,9 @@ export async function injectApi(page: Page) {
 }
 
 async function initBrowser(sessionId?: string, config:any={}) {
-  if(config?.useChrome) {
+  if(config?.useChrome && !config?.executablePath) {
     config.executablePath = ChromeLauncher.Launcher.getInstallations()[0];
+    console.log(`You have used the useChrome (--use-chrome) config option. In order to improve startup time please use "executablePath": "${config.executablePath}" to save a few seconds on next startup.`)
     // console.log('\nFound chrome', config.executablePath)
   }
 
@@ -89,7 +194,8 @@ async function initBrowser(sessionId?: string, config:any={}) {
     }
   }
   
-  if(config?.proxyServerCredentials?.address) puppeteerConfig.chromiumArgs.push(`--proxy-server=${config.proxyServerCredentials.address}`)
+  // if(config?.proxyServerCredentials?.address) puppeteerConfig.chromiumArgs.push(`--proxy-server=${config.proxyServerCredentials.address}`)
+  if(config?.browserWsEndpoint) config.browserWSEndpoint = config.browserWsEndpoint;
   const browser = (config?.browserWSEndpoint) ? await puppeteer.connect({...config}): await puppeteer.launch({
     headless: true,
     devtools: false,

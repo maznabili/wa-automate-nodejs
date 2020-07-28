@@ -98,8 +98,15 @@ app.listen(PORT, function () {
     console.log(message.body, message.id, message?.quotedMsgObj?.id);
     if (message.mimetype) {
       const filename = `${message.t}.${mime.extension(message.mimetype)}`;
-      const mediaData = await decryptMedia(message, uaOverride);
 
+      // if it is a sticker, you need to run this.
+      let mediaData;
+      if( message.type==='sticker') {
+        let stickerDecryptable = await client.getStickerDecryptable(message.id);
+        mediaData = await decryptMedia(stickerDecryptable, uaOverride);
+      } else {
+        mediaData = await decryptMedia(message, uaOverride);
+      }
       // you can send a file also with sendImage or await client.sendFile
       // await client.sendImage(
       //   message.from,
@@ -123,7 +130,7 @@ app.listen(PORT, function () {
 
         // await client.forwardMessages(message.from,message,false);
 
-        await client.forwardMessages(message.from,message,false);
+        await client.forwardMessages(message.from,message.id,false);
       fs.writeFile(filename, mediaData, function(err) {
         if (err) {
           return console.log(err);
