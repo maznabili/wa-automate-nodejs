@@ -3,6 +3,13 @@ import axios from 'axios';
 var uniq = require('lodash.uniq');
 const fs = require('fs');
 var pkg = require('../../package.json');
+const hasha = require('hasha');
+const currentHash = '880da51f36494948515f8849126c8287'
+
+export async function checkWAPIHash(){
+  const h =  await hasha.fromFile(path.join(__dirname, '../lib', 'wapi.js'), {algorithm: 'md5'});
+  return h == currentHash
+}
 
 export async function integrityCheck(waPage, notifier, spinner, debugInfo) {
     const waitForIdle = catchRequests(waPage);

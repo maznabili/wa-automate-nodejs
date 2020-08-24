@@ -42,6 +42,12 @@ ev.on('sessionData.**', async (sessionData, sessionId) =>{
   console.log("----------")
 })
 
+ev.on('sessionDataBase64.**', async (sessionData, sessionId) =>{
+  console.log("\n----------")
+  console.log('sessionData',sessionId, sessionData)
+  console.log("----------")
+})
+
 async function start(client: Client) {
   app.use(client.middleware(true));
 
@@ -102,8 +108,9 @@ app.listen(PORT, function () {
       // if it is a sticker, you need to run this.
       let mediaData;
       if( message.type==='sticker') {
+        //getStickerDecryptable is an insiders feature! 
         let stickerDecryptable = await client.getStickerDecryptable(message.id);
-        mediaData = await decryptMedia(stickerDecryptable, uaOverride);
+        if(stickerDecryptable) mediaData = await decryptMedia(stickerDecryptable, uaOverride);
       } else {
         mediaData = await decryptMedia(message, uaOverride);
       }
@@ -182,7 +189,7 @@ create({
   killProcessOnBrowserClose: true,
   autoRefresh:true, //default to true
   qrRefreshS:15, //please note that if this is too long then your qr code scan may end up being invalid. Generally qr codes expire every 15 seconds.
-  safeMode: true
+  safeMode: true,
   // cacheEnabled:false,
   // devtools:true,
   //OR

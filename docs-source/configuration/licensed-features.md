@@ -9,16 +9,21 @@ open-wa is at the forefront of open source WA developmentand runs on donations f
 
 | Function                          | Description |
 | --------------------------------- | ----------- |
-| [`setGroupToAdminsOnly`](https://open-wa.github.io/wa-automate-nodejs/classes/client.html#setGroupToAdminsOnly)                   | Changes group setting so only admins can send messages            |
-| [`setGroupEditToAdminsOnly`](https://open-wa.github.io/wa-automate-nodejs/classes/client.html#setGroupEditToAdminsOnly)                   | Changes group setting so only admins can edit group info            |
-| [`setProfilePic`](https://open-wa.github.io/wa-automate-nodejs/classes/client.html#setProfilePic)                   | Change the host phones profile picture           |
-| [`onRemovedFromGroup`](https://open-wa.github.io/wa-automate-nodejs/classes/client.html#onRemovedFromGroup)                   | Detect when host phone is removed from a group           |
-| [`onContactAdded`](https://open-wa.github.io/wa-automate-nodejs/classes/client.html#onContactAdded)                   | Detect when host phone adds a new contact           |
-| [`getCommonGroups`](https://open-wa.github.io/wa-automate-nodejs/classes/client.html#getCommonGroups)                   | Retreive all common groups between the host device and a conttact           |
-| [`clearAllChats`](https://open-wa.github.io/wa-automate-nodejs/classes/client.html#clearAllChats)                   | Easily clear memory by clearing all chats of all messages on the host device and WA Web           |
-| [`sendReplyWithMentions`](https://open-wa.github.io/wa-automate-nodejs/classes/client.html#sendReplyWithMentions)                   | Send a reply to a message with mentions           |
-| [`onChatOpened`](https://open-wa.github.io/wa-automate-nodejs/classes/client.html#onChatOpened)                   | Detect when a chat is selected in the UI           |
-| [`onChatState`](https://open-wa.github.io/wa-automate-nodejs/classes/client.html#onChatState)                   | Detect when someone is typing or recording a voicenote           |
+| [[setGroupToAdminsOnly]]                  | Changes group setting so only admins can send messages            |
+| [[setGroupEditToAdminsOnly]]                   | Changes group setting so only admins can edit group info            |
+| [[setGroupTitle]]                   | Changes the group title           |
+| [[setGroupDescription]]                   | Changes the group description         |
+| [[setProfilePic]]                   | Change the host phones profile picture           |
+| [[onRemovedFromGroup]]                   | Detect when host phone is removed from a group           |
+| [[onContactAdded]]                   | Detect when host phone adds a new contact           |
+| [[getCommonGroups]]                   | Retreive all common groups between the host device and a conttact           |
+| [[clearAllChats]]                   | Easily clear memory by clearing all chats of all messages on the host device and WA Web           |
+| [[sendReplyWithMentions]]                   | Send a reply to a message with mentions           |
+| [[onChatOpened]]                   | Detect when a chat is selected in the UI           |
+| [[onChatState]]                   | Detect when someone is typing or recording a voicenote           |
+| [[getStickerDecryptable]]                   | Convert a normal sticker message (results in blank image) to one that is able to grab and decrypt the actual sticker           |
+| [[forceStaleMediaUpdate]]                   | If a media message is old, the file url will result in a `404` error. forceStaleMediaUpdate forces the mobile app to reupload the file.           |
+| [[tagEveryone]]                   | Send a group message with everyone tagged.           |
 
 ### Restricted Features
 
@@ -80,6 +85,8 @@ console.log('Host account', hostAccountNumber);
 ```
 
 If it's different from what you've entered in the checkout form, [please fill and send this email.](mailto:shah@idk.uno?subject=OPENWA%3A%20WRONG%20HOST%20ACC%20NUMBER&body=email%20used%20to%20buy%20key%3A%0D%0Alicense%20key%3A%0D%0Acorrect%20host%20account%20number%3A%0D%0A)
+
+If you are having issues where your license key shows as valid in the console, but the features continually return `false` this may be due to a NodeJS issue relating to the time on your machine. To fix this, make sure your machine's time is correct.
 
 ## Switching your host account
 
