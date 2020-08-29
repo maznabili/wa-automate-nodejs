@@ -8,6 +8,17 @@ export enum QRFormat{
     JPEG = 'jpeg',
     WEBM = 'webm'
   }
+
+  /**
+   * The available languages for the host security notification
+   */
+  export enum NotificationLanguage {
+      PTBR = 'pt-br',
+      ENGB = 'en-gb',
+      DEDE = 'de-de',
+      IDID = 'id-id',
+      ES = 'es',
+  }
   
   /**
    * The set values of quality you can set for the qquality of the qr code output. Ten being the highest quality.
@@ -262,12 +273,22 @@ export interface ConfigObject {
     skipSessionSave ?: boolean;
     /**
      * If true, the process will open a browser window where you will see basic event logs and QR codes to authenticate the session. Usually it will open on port 3000. It can also be set to a preferred port.
+     * 
+     * You can also get the QR code png at (if localhost and port 3000):
+     * 
+     * `http://localhost:3000/qr`
+     * 
+     * or if you have multiple session:
+     * 
+     *  `http://localhost:3000/qr?sessionId=[sessionId]`
+     * 
      * @default `false | 3000`
      */
     popup ?: boolean | number;
     /**
      * If true, the process will try infer as many config variables as possible from the environment variables. The format of the variables are as below:
      * ```
+     * sessionData     ==>     WA_SESSION_DATA
      * sessionDataPath ==>     WA_SESSION_DATA_PATH
      * sessionId       ==>     WA_SESSION_ID
      * customUserAgent ==>     WA_CUSTOM_USER_AGENT
@@ -301,6 +322,10 @@ export interface ConfigObject {
      * @default `png`
      */
     qrFormat ?:  QRFormat;
+    /**
+     * The language of the host notification. See: https://github.com/open-wa/wa-automate-nodejs/issues/709#issuecomment-673419088
+     */
+    hostNotificationLang ?: NotificationLanguage;
     /**
      * Setting this to true will block all assets from loading onto the page. This may result in some load time impreovements but also increases instability. 
      * @default `false`

@@ -18,7 +18,7 @@ import { SessionInfo } from './model/sessionInfo';
 import { injectApi } from '../controllers/browser';
 import { isAuthenticated } from '../controllers/auth';
 import { ChatId, GroupChatId, Content, Base64, MessageId, ContactId, DataURL, FilePath } from './model/aliases';
-import { bleachMessage } from '@open-wa/wa-decrypt';
+import { bleachMessage, decryptMedia } from '@open-wa/wa-decrypt';
 import * as path from 'path';
 
 export enum namespace {
@@ -220,7 +220,8 @@ declare module WAPI {
   const getChat: (contactId: string) => Chat;
   const getLastSeen: (contactId: string) => Promise<number | boolean>;
   const getProfilePicFromServer: (chatId: string) => any;
-  const getAllChatIds: () => ChatId[];
+  const getAllChatIds: () => Promise<ChatId[]>;
+  const getBlockedIds: () => Promise<ContactId[]>;
   const getAllChatsWithNewMsg: () => Chat[];
   const getAllNewMessages: () => any;
   const getUseHereString: () => Promise<string>;
@@ -367,7 +368,7 @@ export class Client {
     //add a reference to this callback
     const set = () => this.pup(({funcName}) => {
       //@ts-ignore
-      return window[funcName] ? WAPI[funcName](obj => window[funcName](obj)) : false
+      return window[funcName] ? WAPI[`${funcName}`](obj => window[funcName](obj)) : false
     },{funcName});
     this._listeners[funcName] = fn;
     const exists = await this.pup(({funcName})=>window[funcName]?true:false,{funcName});
@@ -917,7 +918,23 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
     );
   }
 
-
+  /**
+   * Decrypts a media message.
+   * @param message This can be the serialized [[MessageId]] or the whole [[Message]] object. It is advised to just use the serialized message ID.
+   * @returns Promise<[[DataURL]]>
+   */
+  public async decryptMedia(message: Message | MessageId) {
+    let m : any;
+    //if it's the message id, get the message
+    if(typeof message === "string") m = await this.getMessageById(message) 
+    else m = message;
+    if(!m.mimetype) throw new Error("Not a media message");
+    if(m.type == "sticker") m = await this.getStickerDecryptable(m.id);
+    //Dont have an insiders license to decrypt stickers
+    if(m===false) return false;
+    const mediaData = await decryptMedia(m);
+    return `data:${m.mimetype};base64,${mediaData.toString('base64')}`
+  };
 
   /**
    * Sends a image to given chat, with caption or not, using base64
@@ -944,11 +961,20 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
           file = await datauri(fs.existsSync(file)  ? file : relativePath);
         }
     }
+    
+   const err = [
+    'Not able to send message to broadcast',
+    'Not a contact',
+    'Error: Number not linked to WhatsApp Account',
+    'ERROR: Please make sure you have at least one chat'
+   ];
 
-    return await this.pup(
+    let res = await this.pup(
       ({ to, file, filename, caption, quotedMsgId, waitForId, ptt}) =>  WAPI.sendImage(file, to, filename, caption, quotedMsgId, waitForId, ptt),
       { to, file, filename, caption, quotedMsgId, waitForId, ptt }
     );
+    if(err.includes(res)) console.error(res);
+    return err.includes(res) ? false : res;
   }
 
   
@@ -1322,6 +1348,14 @@ public async iAmAdmin(){
    */
   public async getAllChatIds() {
       return await this.pup(() => WAPI.getAllChatIds());
+  }
+
+  /**
+   * Retreives an array of IDs of accounts blocked by the host account.
+   * @returns Promise<ChatId[]>
+   */
+  public async getBlockedIds() {
+    return await this.pup(() => WAPI.getBlockedIds());
   }
 
   /**
