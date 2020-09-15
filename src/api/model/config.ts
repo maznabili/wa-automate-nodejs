@@ -17,6 +17,7 @@ export enum QRFormat{
       ENGB = 'en-gb',
       DEDE = 'de-de',
       IDID = 'id-id',
+      ITIT = 'it-it',
       ES = 'es',
   }
   
@@ -199,7 +200,7 @@ export interface ConfigObject {
      */
     autoRefresh ?: boolean,
     /**
-     * This determines the interval at which to refresh the QR code.
+     * This determines the interval at which to refresh the QR code. By default, WA updates the qr code every 18-19 seconds so make sure this value is set to UNDER 18 seconds!!
      */
     qrRefreshS ?: number,
     /**
@@ -216,7 +217,7 @@ export interface ConfigObject {
      */
     useChrome ?: boolean,
     /**
-     * If sent, adds a call to waPage.authenticate with those credentials.
+     * If sent, adds a call to waPage.authenticate with those credentials. Set `corsFix` to true if using a proxy results in CORS errors.
      */
     proxyServerCredentials?: ProxyServerCredentials,
     /**
@@ -293,6 +294,8 @@ export interface ConfigObject {
      * sessionId       ==>     WA_SESSION_ID
      * customUserAgent ==>     WA_CUSTOM_USER_AGENT
      * blockCrashLogs  ==>     WA_BLOCK_CRASH_LOGS
+     * blockAssets     ==>     WA_BLOCK_ASSETS
+     * corsFix         ==>     WA_CORS_FIX
      * cacheEnabled    ==>     WA_CACHE_ENABLED
      * headless        ==>     WA_HEADLESS
      * autoRefresh     ==>     WA_AUTO_REFRESH
@@ -331,6 +334,11 @@ export interface ConfigObject {
      * @default `false`
      */
     blockAssets ?: boolean;
+    /**
+     * Setting this to true will bypass web security. DO NOT DO THIS IF YOU DO NOT HAVE TO. CORS issue may arise when using a proxy.
+     * @default `false`
+     */
+    corsFix ?: boolean
     /**@internal */
     [x: string]: any 
 }
