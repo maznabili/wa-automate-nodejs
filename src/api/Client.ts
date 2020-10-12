@@ -12,7 +12,9 @@ import PQueue from 'p-queue'
 const parseFunction = require('parse-function'),
 pkg = require('../../package.json'),
 datauri = require('datauri'),
-fs = require('fs');
+fs = require('fs'),
+isUrl = require('is-url'),
+isDataURL = (s: string) => !!s.match(/^data:((?:\w+\/(?:(?!;).)+)?)((?:;[\w\W]*?[^;])*),(.+)$/g);
 import treekill from 'tree-kill';
 import { SessionInfo } from './model/sessionInfo';
 import { injectApi } from '../controllers/browser';
@@ -160,6 +162,7 @@ declare module WAPI {
   const isChatOnline: (id: string) => Promise<boolean>;
   const sendLinkWithAutoPreview: (to: string,url: string,text: string) => Promise<string | boolean>;
   const contactBlock: (id: string) => Promise<boolean>;
+  const REPORTSPAM: (id: string) => Promise<boolean>;
   const contactUnblock: (id: string) => Promise<boolean>;
   const deleteConversation: (chatId: string) => Promise<boolean>;
   const clearChat: (chatId: string) => Promise<any>;
@@ -947,7 +950,7 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
   /**
    * Sends a image to given chat, with caption or not, using base64
    * @param to chat id xxxxx@c.us
-   * @param base64 base64 data:image/xxx;base64,xxx or the path of the file you want to send.
+   * @param file DataURL data:image/xxx;base64,xxx or the RELATIVE (should start with `./` or `../`) path of the file you want to send. With the latest version, you can now set this to a normal URL (for example [GET] `https://file-examples-com.github.io/uploads/2017/10/file_example_JPG_2500kB.jpg`).
    * @param filename string xxxxx
    * @param caption string xxxxx
    * @param waitForKey boolean default: false set this to true if you want to wait for the id of the message. By default this is set to false as it will take a few seconds to retreive to the key of the message and this waiting may not be desirable for the majority of users.
@@ -963,12 +966,15 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
     ptt?:boolean
   ) {
       //check if the 'base64' file exists
-      if(file.length<50) {
+      if(!isDataURL(file)) {
+        //must be a file then
         let relativePath = path.join(path.resolve(process.cwd(),file|| ''));
         if(fs.existsSync(file) || fs.existsSync(relativePath)) {
           file = await datauri(fs.existsSync(file)  ? file : relativePath);
-        }
-    }
+        } else if(isUrl(file)){
+          return await this.sendFileFromUrl(to,file,filename,caption,quotedMsgId,{},waitForId,ptt);
+        } else throw new Error('Cannot find file. Make sure the file reference is relative, a valid URL or a valid DataURL')
+      }
     
    const err = [
     'Not able to send message to broadcast',
@@ -1015,6 +1021,8 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
 
   /**
    * 
+   * Sends a reply to a given message. Please note, you need to have at least sent one normal message to a contact in order for this to work properly.
+   * 
    * @param to string chatid
    * @param content string reply text
    * @param quotedMsgId string the msg id to reply to.
@@ -1032,7 +1040,7 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
   /**
    * Sends a file to given chat, with caption or not, using base64. This is exactly the same as sendImage
    * @param to chat id xxxxx@c.us
-   * @param base64 base64 data:image/xxx;base64,xxx or the path of the file you want to send.
+   * @param file DataURL data:image/xxx;base64,xxx or the RELATIVE (should start with `./` or `../`) path of the file you want to send. With the latest version, you can now set this to a normal URL (for example [GET] `https://file-examples-com.github.io/uploads/2017/10/file_example_JPG_2500kB.jpg`).
    * @param filename string xxxxx
    * @param caption string xxxxx
    * @param quotedMsgId string true_0000000000@c.us_JHB2HB23HJ4B234HJB to send as a reply to a message
@@ -1045,14 +1053,15 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
     filename: string,
     caption: Content,
     quotedMsgId?: MessageId,
-    waitForId?: boolean
+    waitForId?: boolean,
+    ptt?:boolean
   ) {
-    return this.sendImage(to, file, filename, caption, quotedMsgId, waitForId);
+    return this.sendImage(to, file, filename, caption, quotedMsgId, waitForId, ptt);
   }
 
 
   /**
-   * Sends a file to given chat, with caption or not, using base64. This is exactly the same as sendImage
+   * Attempts to send a file as a voice note. Useful if you want to send an mp3 file.
    * @param to chat id xxxxx@c.us
    * @param base64 base64 data:image/xxx;base64,xxx or the path of the file you want to send.
    * @param quotedMsgId string true_0000000000@c.us_JHB2HB23HJ4B234HJB to send as a reply to a message
@@ -1065,6 +1074,18 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
   ) {
     return this.sendImage(to, file, 'ptt.ogg', '', quotedMsgId, true, true);
   }
+  
+  /**
+   * Alias for [[sendPtt]]
+   */
+  public async sendAudio(
+    to: ChatId,
+    file: DataURL | FilePath,
+    quotedMsgId: MessageId,
+  ) {
+    return this.sendPtt(to, file,quotedMsgId);
+  }
+
 
 
 
@@ -1139,11 +1160,13 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
     caption: Content,
     quotedMsgId?: MessageId,
     requestConfig: any = {},
-    waitForId?: boolean
+    waitForId?: boolean,
+    ptt?:boolean
   ) {
     try {
      const base64 = await getDUrl(url, requestConfig);
-      return await this.sendFile(to,base64,filename,caption,quotedMsgId,waitForId)
+     console.log("base64", base64.substr(0,20))
+      return await this.sendFile(to,base64,filename,caption,quotedMsgId,waitForId,ptt)
     } catch(error) {
       console.log('Something went wrong', error);
       throw error;
@@ -1456,6 +1479,18 @@ public async iAmAdmin(){
  */
 public async contactBlock(id: ContactId) {
   return await this.pup(id => WAPI.contactBlock(id),id)
+}
+
+
+/**
+ * Report a contact for spam, block them and attempt to clear chat.
+ * 
+ * [This is a restricted feature and requires a restricted key.](https://gumroad.com/l/BTMt?tier=1%20Restricted%20License%20Key)
+ * 
+ * @param {string} id '000000000000@c.us'
+ */
+public async reportSpam(id: ContactId | ChatId) {
+  return await this.pup(id => WAPI.REPORTSPAM(id),id)
 }
 
 /**
@@ -2208,12 +2243,12 @@ public async getStatus(contactId: ContactId) {
       let webpBase64 = b64;
       let metadata : any = { width: 512, height: 512 };
       if(!mimeInfo.includes('webp')) {
-      //non matter what, convert to webp, resize + autoscale to width 512 px
-      const scaledImageBuffer = await sharp(buff,{ failOnError: false })
-      .resize({ width: 512, height: 512 })
-      .toBuffer();
-      const webp = sharp(scaledImageBuffer,{ failOnError: false }).webp();
+        const { pages } = await sharp(buff).metadata();
+      //@ts-ignore
+      let webp = sharp(buff,{ failOnError: false, animated: !!pages}).webp();
+      if(!!!pages) webp = webp.resize(metadata);
       metadata = await webp.metadata();
+      metadata.animated = !!pages;
       webpBase64 = (await webp.toBuffer()).toString('base64');
       return {
         metadata,
@@ -2242,18 +2277,19 @@ public async getStatus(contactId: ContactId) {
       );
   }
 
-
-
-
   /**
-   * WORK IN PROGRESS
+   * [WIP]
+   * You can use this to send a raw webp file.
+   * @param to ChatId The chat id you want to send the webp sticker to
+   * @param webpBase64 Base64 The base64 string of the webp file. Not DataURl
+   * @param animated Boolean Set to true if the webp is animated. Default `false`
    */
-  public async sendRawWebpAsSticker(to: ChatId, webpBase64: Base64){
+  public async sendRawWebpAsSticker(to: ChatId, webpBase64: Base64, animated : boolean = false){
     let metadata =  {
   format: 'webp',
   width: 512,
   height: 512,
-  animated: true,
+  animated,
     }
     return await this.pup(
       ({ webpBase64,to, metadata }) => WAPI.sendImageAsSticker(webpBase64,to, metadata),

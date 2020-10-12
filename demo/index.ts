@@ -1,8 +1,7 @@
 // const wa = require('../dist/index');
 // var create = require("@open-wa/wa-automate").create;
 // import { create, Client, decryptMedia, ev } from '../dist/index';
-import { create, Client, decryptMedia, ev, smartUserAgent } from '../src/index';
-import { NotificationLanguage } from '../src/api/model';
+import { create, Client, decryptMedia, ev, smartUserAgent, NotificationLanguage } from '../src/index';
 const mime = require('mime-types');
 const fs = require('fs');
 const uaOverride = 'WhatsApp/2.16.352 Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_1) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0.3 Safari/605.1.15';
@@ -100,6 +99,10 @@ app.listen(PORT, function () {
   // client.onParticipantsChanged("XXXXXXXXXX-YYYYYYYYY@g.us",x=>console.log(x))
   client.onMessage(async message => {
     try {
+
+    const mp3_message_id = await client.sendAudio(message.from,'https://file-examples-com.github.io/uploads/2017/11/file_example_MP3_700KB.mp3', null)
+    console.log("start -> mp", mp3_message_id)
+
     const isConnected = await client.isConnected();
     console.log("TCL: start -> isConnected", isConnected)
     console.log(message.body, message.id, message?.quotedMsgObj?.id);
@@ -116,12 +119,12 @@ app.listen(PORT, function () {
         mediaData = await decryptMedia(message, uaOverride);
       }
       // you can send a file also with sendImage or await client.sendFile
-      // await client.sendImage(
-      //   message.from,
-      //   `data:${message.mimetype};base64,${mediaData.toString('base64')}`,
-      //   filename,
-      //   `You just sent me this ${message.type}`
-      // );
+      await client.sendImage(
+        message.from,
+        `data:${message.mimetype};base64,${mediaData.toString('base64')}`,
+        filename,
+        `You just sent me this ${message.type}`
+      );
       
       //send the whole data URI so the mimetype can be checked.
       await client.sendImageAsSticker(message.from, `data:${message.mimetype};base64,${mediaData.toString('base64')}`)
@@ -139,12 +142,32 @@ app.listen(PORT, function () {
         // await client.forwardMessages(message.from,message,false);
 
         await client.forwardMessages(message.from,message.id,false);
-      fs.writeFile(filename, mediaData, function(err) {
+      fs.writeFileSync(filename, mediaData, function(err) {
         if (err) {
           return console.log(err);
         }
         console.log('The file was saved!');
       });
+
+      /**
+       * You can also send the file as a relative file reference. The library will automatically open the file and get the dataUrl
+       */
+      const message_id_from_file = await client.sendImage(message.from,
+        './'+filename,
+        filename,
+        'from file',
+        null,
+        true,
+        false
+        )
+      console.log("start -> message_id", message_id_from_file)
+
+      /**
+       * Now you can send an animated gif via url
+       */
+      const sticker_from_url_gif_id = await client.sendStickerfromUrl(message.from, "https://i.giphy.com/media/yJil9u57ybQ9movc6E/source.gif")
+      console.log("start -> sticker_from_url_gif_id", sticker_from_url_gif_id)
+
     } else if (message.type==="location") {
       if(message.shareDuration) console.log('This user has started sharing their live location', message.author || message.from)
       console.log("TCL: location -> message", message.lat, message.lng, message.loc)
@@ -191,6 +214,7 @@ create({
   autoRefresh:true, //default to true
   qrRefreshS:15, //please note that if this is too long then your qr code scan may end up being invalid. Generally qr codes expire every 15 seconds.
   safeMode: true,
+  disableSpins: true,
   hostNotificationLang: NotificationLanguage.PTBR,
   licenseKey: '451030FF-881C4166-A9169952-2E56748C'
   // cacheEnabled:false,
