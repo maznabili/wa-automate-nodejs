@@ -133,6 +133,7 @@ declare module WAPI {
   const addParticipant: (groupId: string, contactId: string) => void;
   const sendGiphyAsSticker: (chatId: string, url: string) => Promise<any>;
   const getMessageById: (mesasgeId: string) => Message;
+  const getMyLastMessage: (chatId: string) => Message;
   const getStickerDecryptable: (mesasgeId: string) => Message | boolean;
   const forceStaleMediaUpdate: (mesasgeId: string) => Message | boolean;
   const setMyName: (newName: string) => Promise<boolean>;
@@ -144,7 +145,7 @@ declare module WAPI {
   const getCommonGroups: (contactId: string) => Promise<{id:string,title:string}[]>;
   const forceUpdateLiveLocation: (chatId: string) => Promise<LiveLocationChangedEvent []> | boolean;
   const setGroupIcon: (groupId: string, imgData: string) => Promise<boolean>;
-  const getGroupAdmins: (groupId: string) => Promise<Contact[]>;
+  const getGroupAdmins: (groupId: string) => Promise<ContactId[]>;
   const removeParticipant: (groupId: string, contactId: string) => Promise<boolean>;
   const addOrRemoveLabels: (label: string, id: string, type: string) => Promise<boolean>;
   const promoteParticipant: (groupId: string, contactId: string) => Promise<boolean>;
@@ -1165,7 +1166,6 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
   ) {
     try {
      const base64 = await getDUrl(url, requestConfig);
-     console.log("base64", base64.substr(0,20))
       return await this.sendFile(to,base64,filename,caption,quotedMsgId,waitForId,ptt)
     } catch(error) {
       console.log('Something went wrong', error);
@@ -1581,6 +1581,18 @@ public async contactUnblock(id: ContactId) {
     return await this.pup(
       messageId => WAPI.getMessageById(messageId),
       messageId
+    ) as Promise<Message>;
+  }
+
+  /**
+   * Retrieves the last message sent by the host account in any given chat or globally.
+   * @param chatId This is optional. If no chat Id is set then the last message sent by the host account will be returned.
+   * @returns message object
+   */
+  public async getMyLastMessage(chatId?: ChatId) {
+    return await this.pup(
+      chatId => WAPI.getMyLastMessage(chatId),
+      chatId
     ) as Promise<Message>;
   }
 
@@ -2114,7 +2126,7 @@ public async getStatus(contactId: ContactId) {
     return await this.pup(
       (groupId) => WAPI.getGroupAdmins(groupId),
       groupId
-    ) as Promise<Contact[]>;
+    ) as Promise<ContactId[]>;
   }
 
   /**

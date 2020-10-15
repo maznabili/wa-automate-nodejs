@@ -11,19 +11,19 @@ timeout = ms => {
 import { Client } from '../api/Client';
 import { ConfigObject } from '../api/model/index';
 import * as path from 'path';
-import { isAuthenticated, isInsideChat, retrieveQR, phoneIsOutOfReach } from './auth';
+import { isInsideChat, retrieveQR, phoneIsOutOfReach, isAuthenticated } from './auth';
 import { initClient, injectApi } from './browser';
 import { Spin, ev } from './events'
-import axios from 'axios';
 import { integrityCheck, checkWAPIHash } from './launch_checks';
 import treekill from 'tree-kill';
 import CFonts from 'cfonts';
 import { popup } from './popup';
-import { getConfigFromProcessEnv } from '../utils/configSchema';
+import { getConfigFromProcessEnv } from '../utils/tools';
 import { SessionInfo } from '../api/model/sessionInfo';
 /** @ignore */
 let shouldLoop = true,
-qrDelayTimeout;
+qrDelayTimeout,
+axios;
 
 /**
  * Should be called to initialize whatsapp client.
@@ -48,12 +48,7 @@ qrDelayTimeout;
 export async function create(_sessionId?: string | ConfigObject, config?: ConfigObject, customUserAgent?: string): Promise<Client> {
   const START_TIME = Date.now();
   let waPage = undefined;
-  const notifier = await updateNotifier({
-    pkg,
-    updateCheckInterval: 0
-  });
-  notifier.notify();
-
+  let notifier;
   let sessionId : string = '';
   if (typeof _sessionId === 'object' && (_sessionId as ConfigObject)) {
     config = _sessionId;
@@ -61,6 +56,31 @@ export async function create(_sessionId?: string | ConfigObject, config?: Config
     sessionId = _sessionId;
   } else if(!_sessionId) {
     config = {}
+  }
+
+  if(!config?.skipUpdateCheck || config?.keepUpdated) {
+    console.log('checking update')
+    notifier = await updateNotifier({
+      pkg,
+      updateCheckInterval: 0
+    });
+    notifier.notify();
+    if(notifier?.update && config?.keepUpdated) {
+      console.log('UPDATING @OPEN-WA')
+      const result = require('cross-spawn').spawn.sync('npm', ['i', '@open-wa/wa-automate'], { stdio: 'inherit' });
+      if(!result.stderr) {
+          console.log('UPDATED SUCCESSFULLY')
+      }
+      console.log('RESTARTING PROCESS')
+      process.on("exit", function () {
+        require('cross-spawn').spawn(process.argv.shift(), process.argv, {
+            cwd: process.cwd(),
+            detached : true,
+            stdio: "inherit"
+        });
+    });
+    process.exit();
+    }
   }
 
   if(config?.inDocker) {
@@ -107,7 +127,7 @@ export async function create(_sessionId?: string | ConfigObject, config?: Config
     const PAGE_UA = await waPage.evaluate('navigator.userAgent');
     const BROWSER_VERSION = await waPage.browser().version();
 
-    const WA_AUTOMATE_VERSION = `${pkg.version}${notifier.update ? ` UPDATE AVAILABLE: ${notifier.update.latest}` : ''}`;
+    const WA_AUTOMATE_VERSION = `${pkg.version}${notifier?.update ? ` UPDATE AVAILABLE: ${notifier?.update.latest}` : ''}`;
     //@ts-ignore
     const WA_VERSION = await waPage.evaluate(() => window.Debug ? window.Debug.VERSION : 'I think you have been TOS_BLOCKed')
     //@ts-ignore
@@ -240,6 +260,7 @@ export async function create(_sessionId?: string | ConfigObject, config?: Config
       //patch issues with wapi.js
       if (!config?.skipPatches){
         spinner.info('Installing patches')
+        if(!axios) axios = await import('axios');
         const { data } = await axios.get(pkg.patches);
         await Promise.all(data.map(patch => waPage.evaluate(`${patch}`)))
         spinner.succeed('Patches Installed')
@@ -247,6 +268,7 @@ export async function create(_sessionId?: string | ConfigObject, config?: Config
       const client = new Client(waPage, config, debugInfo);
       const { me } = await client.getMe();
       if (config?.licenseKey) {
+        if(!axios) axios = await import('axios');
         let l_err;
         spinner.start('Checking License')
         const { data } = await axios.post(pkg.licenseCheckUrl, { key: config.licenseKey, number: me._serialized, ...debugInfo });

@@ -1,6 +1,6 @@
 {
   "name": "@open-wa/wa-automate",
-  "version": "2.0.31",
+  "version": "2.1.1",
   "licenseCheckUrl": "https://openwa.web.app/license-check",
   "brokenMethodReportUrl": "https://openwa.web.app/report-bm",
   "patches": "https://raw.githack.com/open-wa/wa-automate-nodejs/master/patches.json",
@@ -91,6 +91,7 @@
     "cfonts": "^2.8.5",
     "change-case": "^4.1.1",
     "chrome-launcher": "^0.13.0",
+    "cross-spawn": "^7.0.3",
     "datauri": "^3.0.0",
     "death": "^1.1.0",
     "eventemitter2": "^6.0.0",

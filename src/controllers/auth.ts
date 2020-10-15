@@ -1,7 +1,7 @@
 import * as puppeteer from 'puppeteer';
 import * as qrcode from 'qrcode-terminal';
-import { from, merge } from 'rxjs';
-import { take } from 'rxjs/operators';
+import { merge, from } from 'rxjs';
+import { take } from 'rxjs/internal/operators/take';
 import {EvEmitter, ev} from './events'
 import { QRFormat, QRQuality } from '../api/model';
 

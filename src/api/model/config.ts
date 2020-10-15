@@ -143,6 +143,11 @@ export interface ConfigObject {
      */
     skipBrokenMethodsCheck ?: boolean,
     /**
+     * If set to true, `skipUpdateCheck` will bypass the latest version check. This saves some time on boot (around 150 ms).
+     * @default `false`
+     */
+    skipUpdateCheck ?: boolean,
+    /**
      * This is the name of the session. You have to make sure that this is unique for every session.
      * @default `session`
      */
@@ -334,6 +339,12 @@ export interface ConfigObject {
      * @default `false`
      */
     blockAssets ?: boolean;
+    /**
+     * [ALPHA FEATURE - ONLY IMPLEMENTED FOR TESTING - DO NOT USE IN PRODUCTION YET]
+     * Setting this to true will result in the library making sure it is always starting with the latest version of itself. This overrides `skipUpdateCheck`.
+     * @default `false`
+     */
+    keepUpdated ?: boolean;
     /**
      * Setting this to true will bypass web security. DO NOT DO THIS IF YOU DO NOT HAVE TO. CORS issue may arise when using a proxy.
      * @default `false`

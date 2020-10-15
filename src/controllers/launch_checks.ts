@@ -1,5 +1,4 @@
 import * as path from 'path';
-import axios from 'axios';
 var uniq = require('lodash.uniq');
 const fs = require('fs');
 var pkg = require('../../package.json');
@@ -39,11 +38,12 @@ export async function integrityCheck(waPage, notifier, spinner, debugInfo) {
       if(BROKEN_METHODS.length>0)  {
         spinner.info('Unable to repair. Reporting broken methods.');
         //report broken methods:
-        if(notifier.update) {
+        if(notifier?.update) {
           //needs an updated
           spinner.fail("!!!BROKEN METHODS DETECTED!!!\n\n Please update to the latest version: " + notifier.update.latest)
         } else {
           //hmm latest version
+          const axios = (await import('axios')).default;
       const report : any = await axios.post(pkg.brokenMethodReportUrl, {...debugInfo,BROKEN_METHODS}).catch(e=>false);
       if(report?.data) {
         spinner.fail(`Unable to repair broken methods. Sometimes this happens the first time after a new WA version, please try again. An issue has been created, add more detail if required: ${report?.data}` );
