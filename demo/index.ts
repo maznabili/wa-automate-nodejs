@@ -21,27 +21,43 @@ ON_DEATH(async function(signal, err) {
   if(globalClient)await globalClient.kill();
 })
 
-
+/**
+ * Detect the qr code
+ */
 ev.on('qr.**', async (qrcode,sessionId) => {
-  // console.log("TCL: qrcode", qrcode)
-  //     console.log("TCL: qrcode,sessioId", qrcode,sessionId)
   //base64 encoded qr code image
   const imageBuffer = Buffer.from(qrcode.replace('data:image/png;base64,',''), 'base64');
   fs.writeFileSync(`qr_code${sessionId?'_'+sessionId:''}.png`, imageBuffer);
 });
 
+/**
+ * Detect when a session has been started successfully
+ */
+ev.on('STARTUP.**', async (data,sessionId) => {
+  if(data==='SUCCESS') console.log(`${sessionId} started!`)
+})
+
+/**
+ * Detect all events
+ */
 ev.on('**', async (data,sessionId,namespace) => {
   console.log("\n----------")
   console.log('EV',data,sessionId,namespace)
   console.log("----------")
 })
 
+/**
+ * Detect the session data object
+ */
 ev.on('sessionData.**', async (sessionData, sessionId) =>{
   console.log("\n----------")
   console.log('sessionData',sessionId, sessionData)
   console.log("----------")
 })
 
+/**
+ * Detect the session data object encoded as a base64string
+ */
 ev.on('sessionDataBase64.**', async (sessionData, sessionId) =>{
   console.log("\n----------")
   console.log('sessionData',sessionId, sessionData)
@@ -208,15 +224,19 @@ create({
   restartOnCrash: start,
   headless:false,
   throwErrorOnTosBlock:true,
-  qrTimeout:40,
-  authTimeout:40,
+  qrTimeout:0,   //set to 0 to wait forever for a qr scan
+  authTimeout:0, //set to 0 to wait forever for connection to phone
   killProcessOnBrowserClose: true,
   autoRefresh:true, //default to true
-  qrRefreshS:15, //please note that if this is too long then your qr code scan may end up being invalid. Generally qr codes expire every 15 seconds.
   safeMode: true,
   disableSpins: true,
   hostNotificationLang: NotificationLanguage.PTBR,
-  licenseKey: '451030FF-881C4166-A9169952-2E56748C'
+  viewport: {
+    // width: 1920,
+    height: 1200
+  },
+  popup: 3000,
+  defaultViewport: null,
   // cacheEnabled:false,
   // devtools:true,
   //OR

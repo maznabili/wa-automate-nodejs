@@ -200,16 +200,25 @@ export interface ConfigObject {
      */
     headless ?: boolean,
     /**
+     * @deprecated
+     * 
+     * THIS IS LOCKED TO `true` AND CANNOT BE TURNED OFF. PLEASE SEE [[authTimeout]]
+     * 
      * Setting this to true will result in new QR codes being generated if the end user takes too long to scan the QR code.
-     * @default false
+     * @default `true`
      */
     autoRefresh ?: boolean,
     /**
+     * @deprecated
+     * 
+     * This now has no effect
+     * 
      * This determines the interval at which to refresh the QR code. By default, WA updates the qr code every 18-19 seconds so make sure this value is set to UNDER 18 seconds!!
      */
     qrRefreshS ?: number,
     /**
-     * This determines how long the process should wait for a QR code to be scanned before killing the process entirely.
+     * This determines how long the process should wait for a QR code to be scanned before killing the process entirely. To have the system wait continuously, set this to `0`.
+     * @default 60
      */
     qrTimeout ?: number,
     /**
@@ -259,7 +268,8 @@ export interface ConfigObject {
      */
     logConsoleErrors ?: boolean,
     /**
-    *This determines how long the process should wait for the session authentication. If exceeded, checks if phone is out of reach (turned of or without internet connection) and throws an error.
+    * This determines how long the process should wait for the session authentication. If exceeded, checks if phone is out of reach (turned of or without internet connection) and throws an error. It does not relate to the amount of time spent waiting for a qr code scan (see [[qrTimeout]]). To have the system wait continuously, set this to `0`.
+    * @default `60`
     */
     authTimeout?: number;
     /**
@@ -292,6 +302,14 @@ export interface ConfigObject {
      */
     popup ?: boolean | number;
     /**
+     * This needs to be used in conjuction with `popup`, if `popup` is not true or a number (representing a desired port) then this will not work.
+     * 
+     * Setting this to true will make sure that only the qr code png is served via the web server. This is useful if you do not need the whole status page.
+     * 
+     * As mentioned in [popup](#popup), the url for the qr code is `http://localhost:3000/qr` if the port is 3000.
+     */
+    qrPopUpOnly ?: boolean
+    /**
      * If true, the process will try infer as many config variables as possible from the environment variables. The format of the variables are as below:
      * ```
      * sessionData     ==>     WA_SESSION_DATA
@@ -303,8 +321,6 @@ export interface ConfigObject {
      * corsFix         ==>     WA_CORS_FIX
      * cacheEnabled    ==>     WA_CACHE_ENABLED
      * headless        ==>     WA_HEADLESS
-     * autoRefresh     ==>     WA_AUTO_REFRESH
-     * qrRefreshS      ==>     WA_QR_REFRESH_S
      * qrTimeout       ==>     WA_QR_TIMEOUT
      * useChrome       ==>     WA_USE_CHROME
      * qrLogSkip       ==>     WA_QR_LOG_SKIP
@@ -345,6 +361,36 @@ export interface ConfigObject {
      * @default `false`
      */
     keepUpdated ?: boolean;
+    /**
+     * Set the desired viewport height and width
+     */
+    viewport ?: {
+        /**
+         * Page width in pixels
+         * @default `1440`
+         */
+        width ?: number;
+        /**
+         * Page height in pixels
+         * @default `900`
+         */
+        height ?: number;
+    };
+    /**
+     * As the library is constantly evolving, some parts will be replaced with more efficient and improved code. In some of the infinite edge cases these new changes may not work for you. Set this to true to roll back on 'late beta' features. The reason why legacy is false by default is that in order for features to be tested they have to be released and used by everyone to find the edge cases and fix them. 
+     * @default `false`
+     */
+    legacy ?: boolean;
+    /**
+     * Deletes the session data file (if found) on logout event. This results in a quickler login when you restart the process.
+     * @default `true`
+     */
+    deleteSessionDataOnLogout ?: boolean;
+    /**
+     * If set to true, the system will kill the whole node process when either an [[authTimeout]] or a [[qrTimeout]] has been reached. This is useful to prevent hanging processes.
+     * @default `false`
+     */
+    killProcessOnTimeout ?: boolean;
     /**
      * Setting this to true will bypass web security. DO NOT DO THIS IF YOU DO NOT HAVE TO. CORS issue may arise when using a proxy.
      * @default `false`

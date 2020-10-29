@@ -9,12 +9,14 @@ const uuidAPIKey = require('uuid-apikey');
 const p2s = require('postman-2-swagger');
 const swaggerUi = require('swagger-ui-express');
 const terminalLink = require('terminal-link');
-
+const tcpPortUsed = require('tcp-port-used');
 const extraFlags = {};
 const configWithCases = require('./config-schema.json');
 
 configWithCases.map(({ type, key }) => {
-	if (key === "popup") type = "number"; extraFlags[key] = {
+	if (key === "popup") type = "number";
+	if (key === "viewport") return;
+	extraFlags[key] = {
 		type
 	}
 });
@@ -72,7 +74,7 @@ ${configParamText}
 		},
 		config: {
 			type: 'string',
-			alias: 'w'
+			alias: 'c'
 		},
 		session: {
 			type: 'string',
@@ -182,60 +184,88 @@ if(c.sessionDataOnly){
 	  })
 }
 
-create({ ...config })
-	.then(async (client) => {
-		if (c && c.webhook) Object.keys(SimpleListener).map(eventKey => client.registerWebhook(SimpleListener[eventKey], c.webhook))
 
-		if(c && c.keepAlive) client.onStateChanged(state=>{
-			if(state==="CONFLICT" || state==="UNLAUNCHED") client.forceRefocus();
-		  });
+async function start(){
+    try {
+        const axios = require('axios').default;
+        const {status, data} = await axios.post(`http://localhost:${PORT}/getConnectionState`);
+        if(status===200 && data.response==="CONNECTED"){
+            const {data: {response: {sessionId, port, webhook, apiHost}}} = await axios.post(`http://localhost:${PORT}/getConfig`);
+            if(config && config.sessionId == sessionId && config.port === port && config.webhook===webhook && config.apiHost===apiHost){
+				console.log('removing popup flag')
+                if(config.popup) {
+                    delete config.popup;
+                }
+            }
+        }
+    } catch (error) {
+        if(error.code==="ECONNREFUSED") console.log('fresh run')
+	}
+	
+return await create({ ...config })
+.then(async (client) => {
+	if (c && c.webhook) Object.keys(SimpleListener).map(eventKey => client.registerWebhook(SimpleListener[eventKey], c.webhook))
 
-		if (!(c && c.noApi)) {
-			if(c && c.key) {
-				console.log(`Please use the following api key for requests as a header:\nkey: ${c.key}`)
-				app.use((req, res, next) => {
-					const apiKey = req.get('key')
-					if (!apiKey || apiKey !== c.key) {
-					  res.status(401).json({error: 'unauthorised'})
-					} else {
-					  next()
-					}
-				  })
-			}
+	if(c && c.keepAlive) client.onStateChanged(state=>{
+		if(state==="CONFLICT" || state==="UNLAUNCHED") client.forceRefocus();
+	  });
 
-			if(c && c.generateApiDocs) {
-				console.log('Generating API Docs');
-				if(!c.sessionId) c.sessionId = 'session';
-				const postmanCollection = await generatePostmanJson({
-					...c,
-					...config
-				});
-				console.log(`Postman collection generated: open-wa-${c.sessionId}.postman_collection.json`);
-				const swCol = p2s.default(postmanCollection);
-				/**
-				 * Fix swagger docs by removing the content type as a required paramater
-				 */
-				Object.keys(swCol.paths).forEach(p => {
-					let path = swCol.paths[p].post;
-					let index = [...path.parameters].findIndex(({name})=>name=="Content-Type");
-					if(index > -1) path.parameters.splice(index, 1);
-				});
-				app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swCol));
-			}
-			
-			app.use(client.middleware((c && c.useSessionIdInPath)));
-			app.listen(PORT, () => {
-				console.log(`\n• Listening on port ${PORT}!`);
-				if(process.send){
-					process.send('ready');
-					process.send('ready');
-					process.send('ready');
+	if (!(c && c.noApi)) {
+		if(c && c.key) {
+			console.log(`Please use the following api key for requests as a header:\nkey: ${c.key}`)
+			app.use((req, res, next) => {
+				const apiKey = req.get('key')
+				if (!apiKey || apiKey !== c.key) {
+				  res.status(401).json({error: 'unauthorised'})
+				} else {
+				  next()
 				}
-			});
-			const apiDocsUrl = c.apiHost ? `${c.apiHost}/api-docs/ `: `${c.host.includes('http') ? '' : 'http://'}${c.host}:${PORT}/api-docs/ `;
-			const link = terminalLink('API Explorer', apiDocsUrl);
-			if(c && c.generateApiDocs)  console.log(`\nCheck out the API here: ${link}`)
-
+			  })
 		}
-	})
-	.catch(e => console.log('Error', e.message));
+
+		if(c && c.generateApiDocs) {
+			console.log('Generating API Docs');
+			if(!c.sessionId) c.sessionId = 'session';
+			const postmanCollection = await generatePostmanJson({
+				...c,
+				...config
+			});
+			console.log(`Postman collection generated: open-wa-${c.sessionId}.postman_collection.json`);
+			const swCol = p2s.default(postmanCollection);
+			/**
+			 * Fix swagger docs by removing the content type as a required paramater
+			 */
+			Object.keys(swCol.paths).forEach(p => {
+				let path = swCol.paths[p].post;
+				let index = [...path.parameters].findIndex(({name})=>name=="Content-Type");
+				if(index > -1) path.parameters.splice(index, 1);
+			});
+			app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swCol));
+		}
+		
+		app.use(client.middleware((c && c.useSessionIdInPath)));
+		if(process.send){
+			process.send('ready');
+			process.send('ready');
+			process.send('ready');
+		}
+		await tcpPortUsed.waitUntilFree(PORT, 200, 20000)
+		console.log(`Port ${PORT} is now free.`);
+		app.listen(PORT, () => {
+			console.log(`\n• Listening on port ${PORT}!`);
+			if(process.send){
+				process.send('ready');
+				process.send('ready');
+				process.send('ready');
+			}
+		});
+		const apiDocsUrl = c.apiHost ? `${c.apiHost}/api-docs/ `: `${c.host.includes('http') ? '' : 'http://'}${c.host}:${PORT}/api-docs/ `;
+		const link = terminalLink('API Explorer', apiDocsUrl);
+		if(c && c.generateApiDocs)  console.log(`\nCheck out the API here: ${link}`)
+
+	}
+})
+.catch(e => console.log('Error', e.message));
+}
+
+start();
