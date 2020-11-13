@@ -38,7 +38,7 @@ const cli = meow(`
       --use-session-id-in-path, -i \tIf set, all API paths will include the session id. default to false and the default session Id is 'session'.
       --generate-api-docs, -d \t\tGenerate postman collection and expose api docs to open in browser.
       --session-data-only, -o \t\tKill the process when the sesion data is saved.
-      --license, -l \t\t\tThe license key you want to use for this server. License keys are used to unlock features. Learn more here https://github.com/open-wa/wa-automate-nodejs#license-key
+      --license-key, -l \t\t\tThe license key you want to use for this server. License keys are used to unlock features. Learn more here https://github.com/open-wa/wa-automate-nodejs#license-key
 ${configParamText}
 	  --skip-save-postman-collection \t\t\tDon't save the postman collection.
 	  --in-docker \t\t\tGrab config options from the environment variables
@@ -214,7 +214,10 @@ return await create({ ...config })
 		if(c && c.key) {
 			console.log(`Please use the following api key for requests as a header:\nkey: ${c.key}`)
 			app.use((req, res, next) => {
-				const apiKey = req.get('key')
+				if(req.path.startsWith('/api-docs/')) {
+					return next();
+				}
+				const apiKey = req.get('key') || req.get('api_key')
 				if (!apiKey || apiKey !== c.key) {
 				  res.status(401).json({error: 'unauthorised'})
 				} else {
@@ -237,10 +240,65 @@ return await create({ ...config })
 			 */
 			Object.keys(swCol.paths).forEach(p => {
 				let path = swCol.paths[p].post;
-				let index = [...path.parameters].findIndex(({name})=>name=="Content-Type");
-				if(index > -1) path.parameters.splice(index, 1);
+				if(c.key) swCol.paths[p].post.security = [
+					{
+						"api_key": []
+					}
+				]
+				swCol.paths[p].post.externalDocs= {
+					"description": "Documentation",
+					"url": swCol.paths[p].post.description
+				  }
+				  swCol.paths[p].post.requestBody = {
+					  "description": path.summary,
+					  "content": {
+						"application/json": {
+							"schema": {
+								"type": "object"
+							},
+							example:  path.parameters[1].example
+						}
+					  }
+				  };
+				  delete path.parameters
 			});
-			app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swCol));
+			delete swCol.swagger
+			swCol.openapi="3.0.3"
+			swCol.externalDocs = {
+				"description": "Find more info here",
+				"url": "https://http://openwa.dev/"
+			  }
+			  if(c.key) {
+				swCol.components = {
+				  "securitySchemes": {
+					  "api_key": {
+						"type": "apiKey",
+						"name": "api_key",
+						"in": "header"
+					  }
+				  }
+				}
+			  swCol.security = [
+				  {
+					  "api_key": []
+				  }
+			  ]
+			  }
+			  //Sort alphabetically
+			var x = {}; Object.keys(swCol.paths).sort().map(k=>x[k]=swCol.paths[k]);swCol.paths=x;
+			fs.writeFileSync("./open-wa-" + c.sessionId + ".sw_col.json", JSON.stringify(swCol));
+			app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swCol, c.key ? {
+				swaggerOptions:{
+					authAction: {
+						api_key: {
+							name: "api_key",
+							schema: {type: "apiKey", in: "header", name: "Authorization", description: ""},
+							value: c.key
+						}
+					}
+				}
+				
+			} : {}));
 		}
 		
 		app.use(client.middleware((c && c.useSessionIdInPath)));
@@ -249,6 +307,7 @@ return await create({ ...config })
 			process.send('ready');
 			process.send('ready');
 		}
+		console.log(`Checking if port ${PORT} is free`);
 		await tcpPortUsed.waitUntilFree(PORT, 200, 20000)
 		console.log(`Port ${PORT} is now free.`);
 		app.listen(PORT, () => {
@@ -265,7 +324,7 @@ return await create({ ...config })
 
 	}
 })
-.catch(e => console.log('Error', e.message));
+.catch(e => console.log('Error', e.message, e));
 }
 
 start();

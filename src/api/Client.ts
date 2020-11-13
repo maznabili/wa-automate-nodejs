@@ -14,6 +14,7 @@ pkg = require('../../package.json'),
 datauri = require('datauri'),
 fs = require('fs'),
 isUrl = require('is-url'),
+ffmpeg = require('fluent-ffmpeg'),
 isDataURL = (s: string) => !!s.match(/^data:((?:\w+\/(?:(?!;).)+)?)((?:;[\w\W]*?[^;])*),(.+)$/g);
 import treekill from 'tree-kill';
 import { SessionInfo } from './model/sessionInfo';
@@ -23,6 +24,8 @@ import { ChatId, GroupChatId, Content, Base64, MessageId, ContactId, DataURL, Fi
 import { bleachMessage, decryptMedia } from '@open-wa/wa-decrypt';
 import * as path from 'path';
 import { CustomProduct } from './model/product';
+import Crypto from 'crypto';
+import { tmpdir } from 'os';
 
 export enum namespace {
   Chat = 'Chat',
@@ -51,6 +54,64 @@ export enum SimpleListener {
   Story = 'onStory',
   RemovedFromGroup = 'onRemovedFromGroup',
   ContactAdded = 'onContactAdded',
+}
+
+
+/**
+ * @internal
+ */
+async function convertMp4BufferToWebpDataUrl(file: DataURL | Buffer | Base64, processOptions: {
+  /**
+   * Desired Frames per second of the sticker output
+   * @default `10`
+   */
+  fps?: number,
+  /**
+   * The video start time of the sticker
+   * @default `00:00:00.0`
+   */
+  startTime?: string,
+  /**
+   * The video end time of the sticker. By default, stickers are made from the first 5 seconds of the video
+   * @default `00:00:05.0`
+   */
+  endTime?: string
+  /**
+   * The amount of times the video loops in the sticker. To save processing time, leave this as 0
+   * default `0`
+   */
+  loop?: number
+} = {
+  fps: 10,
+  startTime: `00:00:00.0`,
+  endTime :  `00:00:05.0`,
+  loop: 0
+}) {
+  const tempFile = path.join(tmpdir(), `processing.${Crypto.randomBytes(6).readUIntLE(0, 6).toString(36)}.webp`);
+  var stream = new (require('stream').Readable)();
+  stream.push(Buffer.isBuffer(file) ? file : Buffer.from(file.replace('data:video/mp4;base64,',''), 'base64'));
+  stream.push(null);
+  await new Promise((resolve, reject) => {
+      ffmpeg(stream)
+          .inputFormat('mp4')
+          .on('start', function (cmd) {
+              console.log('Started ' + cmd);
+          })
+          .on('error', function (err) {
+              console.log('An error occurred: ' + err.message);
+              reject(err)
+          })
+          .on('end', function () {
+              console.log('Finished encoding');
+              resolve(true)
+          })
+          .addOutputOptions([`-vcodec`, `libwebp`, `-vf`, `crop=w='min(min(iw\,ih)\,500)':h='min(min(iw\,ih)\,500)',scale=500:500,setsar=1,fps=${processOptions.fps}`, `-loop`, `${processOptions.loop}`, `-ss`, processOptions.startTime, `-t`, processOptions.endTime, `-preset`, `default`, `-an`, `-vsync`, `0`, `-s`, `512:512`])
+          .toFormat("webp")
+          .save(tempFile);
+  })
+  const d = await datauri(tempFile);
+  fs.unlinkSync(tempFile)
+  return d;
 }
 
 /**
@@ -164,6 +225,7 @@ declare module WAPI {
   const isChatOnline: (id: string) => Promise<boolean>;
   const sendLinkWithAutoPreview: (to: string,url: string,text: string) => Promise<string | boolean>;
   const contactBlock: (id: string) => Promise<boolean>;
+  const checkReadReceipts: (contactId: string) => Promise<boolean | string>;
   const REPORTSPAM: (id: string) => Promise<boolean>;
   const contactUnblock: (id: string) => Promise<boolean>;
   const deleteConversation: (chatId: string) => Promise<boolean>;
@@ -311,6 +373,16 @@ export class Client {
   private async _reRegisterListeners(){
     return Object.keys(this._listeners).forEach((listenerName: SimpleListener)=>this[listenerName](this._listeners[listenerName]));
   }
+
+  /**
+   * A convinience method to download the [[DataURL]] of a file
+   * @param url The url
+   * @param optionsOverride You can use this to override the [axios request config](https://github.com/axios/axios#request-config)
+   * @returns Promise<DataURL>
+   */
+  public async download(url: string, optionsOverride: any = {} ) {
+    return await getDUrl(url, optionsOverride)
+  } 
 
   /**
    * Refreshes the page and reinjects all necessary files. This may be useful for when trying to save memory
@@ -750,11 +822,11 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
    */
   public async kill() {
     console.log('Shutting Down');
-    const browser = await this._page.browser()
-    const pid = browser.process() ? browser.process().pid : null;
+    const browser = await this?._page?.browser()
+    const pid = browser?.process() ? browser?.process()?.pid : null;
     try{
-      if (this._page && !this._page.isClosed()) await this._page.close();
-      if (this._page && this._page.browser) await this._page.browser().close();
+      if (this._page && !this._page?.isClosed()) await this._page?.close();
+      if (this._page && this._page?.browser) await this._page?.browser()?.close();
       if(pid) treekill(pid, 'SIGKILL')
     } catch(error){}
     return true;
@@ -1048,6 +1120,24 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
     return await this.pup(
       ({ to, content, quotedMsgId }) =>WAPI.reply(to, content, quotedMsgId),
       { to, content, quotedMsgId }
+    ) as Promise<string | boolean>;
+  }
+
+  /**
+   * [REQUIRES AN INSIDERS LICENSE-KEY](https://gumroad.com/l/BTMt?tier=Insiders%20Program)
+   * 
+   * Check if a recipient has read receipts on.
+   * 
+   * This will only work if you have chats sent back and forth between you and the contact 1-1.
+   * 
+   * @param contactId The Id of the contact with which you have an existing conversation with messages already.
+   * @returns Promise<string | boolean> true or false or a string with an explaintaion of why it wasn't able to determine the read receipts.
+   * 
+   */
+  public async checkReadReceipts(contactId: ContactId){
+    return await this.pup(
+      ({ contactId }) =>WAPI.checkReadReceipts(contactId),
+      { contactId }
     ) as Promise<string | boolean>;
   }
 
@@ -2073,7 +2163,6 @@ public async getStatus(contactId: ContactId) {
   }
 
   /**
-  * [REQUIRES AN INSIDERS LICENSE-KEY](https://gumroad.com/l/BTMt?tier=Insiders%20Program)
   * 
   * Change who can and cannot speak in a group
   * @param groupId '0000000000-00000000@g.us' the group id.
@@ -2088,7 +2177,6 @@ public async getStatus(contactId: ContactId) {
   }
 
   /**
-   * [REQUIRES AN INSIDERS LICENSE-KEY](https://gumroad.com/l/BTMt?tier=Insiders%20Program)
    * 
   * Change who can and cannot edit a groups details
   * @param groupId '0000000000-00000000@g.us' the group id.
@@ -2215,8 +2303,8 @@ public async getStatus(contactId: ContactId) {
     if(!processingResponse) return false;
     let {webpBase64, metadata} = processingResponse;
       return await this.pup(
-        ({ webpBase64,to, metadata }) => WAPI.sendStickerAsReply(webpBase64,to, metadata, messageId),
-        { webpBase64,to, metadata }
+        ({ webpBase64,to, metadata , messageId }) => WAPI.sendStickerAsReply(webpBase64,to, metadata, messageId),
+        { webpBase64,to, metadata, messageId }
       );
   }
   
@@ -2236,8 +2324,8 @@ public async getStatus(contactId: ContactId) {
     if(!processingResponse) return false;
     let {webpBase64, metadata} = processingResponse;
       return await this.pup(
-        ({ webpBase64,to, metadata }) => WAPI.sendStickerAsReply(webpBase64,to, metadata, messageId),
-        { webpBase64,to, metadata }
+        ({ webpBase64,to, metadata, messageId }) => WAPI.sendStickerAsReply(webpBase64,to, metadata, messageId),
+        { webpBase64,to, metadata, messageId }
       );
   }
 
@@ -2303,6 +2391,64 @@ public async getStatus(contactId: ContactId) {
   }
 
   /**
+   * [ALPHA]
+   * Use this to send an mp4 file as a sticker. This can also be used to convert GIFs from the chat because GIFs in WA are actually tiny mp4 files.
+   * 
+   * You need to make sure you have ffmpeg (with libwebp) installed for this to work.
+   * 
+   * @param to ChatId The chat id you want to send the webp sticker to
+   * @param file [[DataURL]], [[Base64]], URL (string GET), Relative filepath (string), or Buffer of the mp4 file
+   */
+  public async sendMp4AsSticker(to: ChatId, file: DataURL | Buffer | Base64 | string, processOptions: {
+    /**
+     * Desired Frames per second of the sticker output
+     * @default `10`
+     */
+    fps?: number,
+    /**
+     * The video start time of the sticker
+     * @default `00:00:00.0`
+     */
+    startTime?: string,
+    /**
+     * The video end time of the sticker. By default, stickers are made from the first 5 seconds of the video
+     * @default `00:00:05.0`
+     */
+    endTime?: string
+    /**
+     * The amount of times the video loops in the sticker. To save processing time, leave this as 0
+     * default `0`
+     */
+    loop?: number
+  } = {
+    fps: 10,
+    startTime: `00:00:00.0`,
+    endTime :  `00:00:05.0`,
+    loop: 0
+  }) {
+      if(typeof file === 'string') {
+      if(!isDataURL(file)) {
+        //must be a file then
+        if(isUrl(file)){
+          file = await getDUrl(file)
+        } else {
+          let relativePath = path.join(path.resolve(process.cwd(),file|| ''));
+          if(fs.existsSync(file) || fs.existsSync(relativePath)) {
+            file = await datauri(fs.existsSync(file)  ? file : relativePath);
+          } 
+        } 
+      }
+      }
+    const convertedStickerDataUrl = await convertMp4BufferToWebpDataUrl(file, processOptions);
+    try {
+      return await this.sendRawWebpAsSticker(to, convertedStickerDataUrl, true);
+    } catch (error) {
+      console.log('Stickers have to be less than 1MB. Please lower the fps or shorten the duration using the processOptions parameter: https://open-wa.github.io/wa-automate-nodejs/classes/client.html#sendmp4assticker')
+      throw error;
+    }
+  }
+
+  /**
    * [WIP]
    * You can use this to send a raw webp file.
    * @param to ChatId The chat id you want to send the webp sticker to
@@ -2311,11 +2457,12 @@ public async getStatus(contactId: ContactId) {
    */
   public async sendRawWebpAsSticker(to: ChatId, webpBase64: Base64, animated : boolean = false){
     let metadata =  {
-  format: 'webp',
-  width: 512,
-  height: 512,
-  animated,
+        format: 'webp',
+        width: 512,
+        height: 512,
+        animated,
     }
+    webpBase64 = webpBase64.replace(/^data:image\/(png|gif|jpeg|webp);base64,/,'');
     return await this.pup(
       ({ webpBase64,to, metadata }) => WAPI.sendImageAsSticker(webpBase64,to, metadata),
       { webpBase64,to, metadata }
@@ -2478,7 +2625,6 @@ public async getStatus(contactId: ContactId) {
   
     
   /**
-   * [REQUIRES AN INSIDERS LICENSE-KEY](https://gumroad.com/l/BTMt?tier=Insiders%20Program)
    * 
    * Sets the profile pic of the host number.
    * @param data string data url image string.

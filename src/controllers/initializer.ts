@@ -108,6 +108,7 @@ export async function create(config: ConfigObject = {}): Promise<Client> {
   if (!sessionId) sessionId = 'session';
   const spinner = new Spin(sessionId, 'STARTUP', config?.disableSpins);
   try {
+    if(typeof config === 'string') console.error("AS OF VERSION 3+ YOU CAN NO LONGER SET THE SESSION ID AS THE FIRST PARAMETER OF CREATE. CREATE CAN ONLY TAKE A CONFIG OBJECT. IF YOU STILL HAVE CONFIGS AS A SECOND PARAMETER, THEY WILL HAVE NO EFFECT! PLEASE SEE DOCS.")
     spinner.start('Initializing WA');
     waPage = await initClient(sessionId, config, customUserAgent);
     spinner.succeed('Browser Launched');
@@ -141,7 +142,7 @@ export async function create(config: ConfigObject = {}): Promise<Client> {
     spinner.start('Authenticating');
     const authRace = [];
     authRace.push(isAuthenticated(waPage).catch(e=>{}))
-    if (!config?.authTimeout && config?.authTimeout!==0) {
+    if (config?.authTimeout!==0) {
       authRace.push(timeout((config.authTimeout || 60) * 1000))
     }
 
@@ -162,7 +163,7 @@ export async function create(config: ConfigObject = {}): Promise<Client> {
       spinner.info('Authenticate to continue');
       const race = [];
       race.push(smartQr(waPage, config))
-      if (!config?.qrTimeout && config?.qrTimeout!==0) {
+      if (config?.qrTimeout!==0) {
         race.push(timeout((config?.qrTimeout || 60) * 1000))
       }
       const result = await Promise.race(race);
@@ -221,11 +222,6 @@ export async function create(config: ConfigObject = {}): Promise<Client> {
         // config.skipPatches = true;
       }
       debugInfo.NUM = await waPage.evaluate(`(window.localStorage['last-wid'] || '').replace('@c.us','').replace(/"/g,"").slice(-4)`);
-      if (config?.skipBrokenMethodsCheck !== true) await integrityCheck(waPage, notifier, spinner, debugInfo);
-      const LAUNCH_TIME_MS = Date.now() - START_TIME;
-      debugInfo = {...debugInfo, LAUNCH_TIME_MS};
-      spinner.emit(debugInfo, "DebugInfo");
-      spinner.succeed(`Client loaded in ${LAUNCH_TIME_MS/1000}s`);
       if(config?.hostNotificationLang){
         await waPage.evaluate(`window.hostlang="${config.hostNotificationLang}"`)
       }
@@ -237,6 +233,11 @@ export async function create(config: ConfigObject = {}): Promise<Client> {
         await Promise.all(data.map(patch => waPage.evaluate(`${patch}`)))
         spinner.succeed('Patches Installed')
       }
+      if (config?.skipBrokenMethodsCheck !== true) await integrityCheck(waPage, notifier, spinner, debugInfo);
+      const LAUNCH_TIME_MS = Date.now() - START_TIME;
+      debugInfo = {...debugInfo, LAUNCH_TIME_MS};
+      spinner.emit(debugInfo, "DebugInfo");
+      spinner.succeed(`Client loaded in ${LAUNCH_TIME_MS/1000}s`);
       const client = new Client(waPage, config, debugInfo);
       if(config?.deleteSessionDataOnLogout) {
         client.onStateChanged(state=> {
@@ -288,8 +289,8 @@ const kill = async (p) => {
     if(!browser) return;
     const pid = browser?.process() ? browser?.process().pid : null;
     if(!pid) return;
-    if (!p?.isClosed()) await p.close();
-    if (browser) await browser.close().catch(()=>{});
+    if (!p?.isClosed()) await p?.close();
+    if (browser) await browser?.close().catch(()=>{});
     if(pid) treekill(pid, 'SIGKILL')
   }
 }

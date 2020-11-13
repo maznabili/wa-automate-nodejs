@@ -1,6 +1,6 @@
 {
   "name": "@open-wa/wa-automate",
-  "version": "3.0.6",
+  "version": "3.0.15",
   "licenseCheckUrl": "https://openwa.dev/license-check",
   "brokenMethodReportUrl": "https://openwa.dev/report-bm",
   "patches": "https://raw.githack.com/open-wa/wa-automate-nodejs/master/patches.json",
@@ -8,7 +8,7 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
-    "@open-wa/wa-automate": "./bin/server.js"
+    "wa-automate": "bin/server.js"
   },
   "scripts": {
     "build": "rm -rf dist/ && tsc && npm run build:lib && npm run build:config-for-bin",
@@ -62,7 +62,7 @@
     "@types/line-reader": "0.0.30",
     "@types/marked": "^1.1.0",
     "@types/node": "^14.0.1",
-    "@types/puppeteer": "^3.0.0",
+    "@types/puppeteer": "^5.4.0",
     "@types/shelljs": "^0.8.5",
     "auto-changelog": "^2.0.0",
     "ava": "^3.13.0",
@@ -96,12 +96,13 @@
     "death": "^1.1.0",
     "eventemitter2": "^6.0.0",
     "express": "^4.17.1",
+    "fluent-ffmpeg": "^2.1.2",
     "get-port": "^5.1.1",
     "hasha": "^5.2.0",
     "image-type": "^4.1.0",
     "is-url": "^1.2.4",
     "lodash.uniq": "^4.5.0",
-    "meow": "^7.0.1",
+    "meow": "^8.0.0",
     "node-persist": "^3.1.0",
     "open": "^7.0.4",
     "p-queue": "^6.4.0",
@@ -117,8 +118,9 @@
     "qrcode-terminal": "^0.12.0",
     "rxjs": "^6.5.3",
     "sharp": "^0.26.0",
-    "socket.io": "^2.3.0",
+    "socket.io": "^3.0.0",
     "spinnies": "^0.5.1",
+    "swagger-ui-dist": "^3.36.1",
     "swagger-ui-express": "^4.1.4",
     "tcp-port-used": "^1.0.1",
     "terminal-link": "^2.1.1",
