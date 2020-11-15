@@ -284,6 +284,7 @@ declare module WAPI {
   const getAllChatsWithMessages: (withNewMessageOnly?: boolean) => any;
   const getAllChats: () => any;
   const getState: () => string;
+  const forceUpdateConnectionState: () => Promise<string>;
   const getBatteryLevel: () => number;
   const getIsPlugged: () => boolean;
   const clearAllChats: () => Promise<boolean>;
@@ -337,6 +338,7 @@ export class Client {
   private _sessionInfo: SessionInfo;
   private _listeners: any;
   private _page: Page;
+  private _currentlyBeingKilled: boolean = false;
 
   /**
    * @ignore
@@ -609,13 +611,12 @@ export class Client {
    * Listens to add and remove events on Groups on a global level. It is memory efficient and doesn't require a specific group id to listen to.
    * 
    * @event
-   * @param to callback
+   * @param fn callback
    * @returns Observable stream of participantChangedEvent
    */
   public async onGlobalParicipantsChanged(fn: (participantChangedEvent: ParticipantChangedEventModel) => void) {
     return this.registerListener(SimpleListener.GlobalParicipantsChanged, fn);
   }
-
 
   /**
    * Fires callback with Chat object every time the host phone is added to a group.
@@ -677,17 +678,17 @@ export class Client {
    * @param to callback
    * @returns Observable stream of participantChangedEvent
    */
-  public async onParticipantsChanged(groupId: GroupChatId, fn: (participantChangedEvent: ParticipantChangedEventModel) => void, useLegancyMethod : boolean = false) {
+  public async onParticipantsChanged(groupId: GroupChatId, fn: (participantChangedEvent: ParticipantChangedEventModel) => void, legacy : boolean = false) {
     const funcName = "onParticipantsChanged_" + groupId.replace('_', "").replace('_', "");
     return this._page.exposeFunction(funcName, (participantChangedEvent: ParticipantChangedEventModel) =>
       fn(participantChangedEvent)
     )
       .then(_ => this.pup(
-        ({ groupId,funcName, useLegancyMethod }) => {
+        ({ groupId,funcName, legacy }) => {
           //@ts-ignore
-          if(useLegancyMethod) return WAPI._onParticipantsChanged(groupId, window[funcName]); else return WAPI.onParticipantsChanged(groupId, window[funcName]);
+          if(legacy) return WAPI._onParticipantsChanged(groupId, window[funcName]); else return WAPI.onParticipantsChanged(groupId, window[funcName]);
         },
-        { groupId, funcName, useLegancyMethod}
+        { groupId, funcName, legacy}
       ));
   }
 
@@ -810,6 +811,14 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
   }
 
   /**
+   * Forces the session to update the connection state. This will take a few seconds to determine the 'correct' state.
+   * @returns updated connection state
+   */
+  public async forceUpdateConnectionState() {
+    return await this._page.evaluate(() => WAPI.forceUpdateConnectionState());
+  }
+
+  /**
    * Returns a list of contact with whom the host number has an existing chat who are also not contacts.
    */
   public async getChatWithNonContacts(){
@@ -821,6 +830,8 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
    * @returns true
    */
   public async kill() {
+    if(this._currentlyBeingKilled) return;
+    this._currentlyBeingKilled = true;
     console.log('Shutting Down');
     const browser = await this?._page?.browser()
     const pid = browser?.process() ? browser?.process()?.pid : null;
@@ -829,6 +840,7 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
       if (this._page && this._page?.browser) await this._page?.browser()?.close();
       if(pid) treekill(pid, 'SIGKILL')
     } catch(error){}
+    this._currentlyBeingKilled = false;
     return true;
   }
 
@@ -1280,7 +1292,8 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
  * Returns an object with all of your host device details
  */
   public async getMe(){
-    return await this.pup(() => WAPI.getMe());
+    return await this._page.evaluate(() => WAPI.getMe());
+    // return await this.pup(() => WAPI.getMe());
     //@ts-ignore
     // return await this.pup(() => Store.Me.attributes);
   }
@@ -1566,7 +1579,10 @@ public async iAmAdmin(){
  * - Follow this link to join my WA group: https://chat.whatsapp.com/DHTGJUfFJAV9MxOpZO1fBZ
  * - https://chat.whatsapp.com/DHTGJUfFJAV9MxOpZO1fBZ
  * - DHTGJUfFJAV9MxOpZO1fBZ
- * @returns Promise<string | boolean> Either false if it didn't work, or the group id.
+ * 
+ * If you have been removed from the group previously, it will return `401`
+ * 
+ * @returns Promise<string | boolean | number> Either false if it didn't work, or the group id.
  */
   public async joinGroupViaLink(link: string) {
     return await this.pup(
@@ -2019,7 +2035,7 @@ public async getStatus(contactId: ContactId) {
    * @param chatId, the chat to get the messages from
    * @param includeMe, include my own messages? boolean
    * @param includeNotifications
-   * @returns any
+   * @returns Message[]
    */
 
   public async getAllMessagesInChat(chatId: ChatId, includeMe: boolean, includeNotifications: boolean) {
