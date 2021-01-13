@@ -3,10 +3,15 @@
     "release": true
   },
   "hooks": {
-    "after:bump": "npm run build && npx auto-changelog --commit-limit false -p -t keepachangelog && typedoc && npm run release-image",
+    "after:bump": "npm run build && npx auto-changelog --commit-limit false -p -t keepachangelog && typedoc && npm run cname && npm run release-image",
     "before:git:release": "npm run release-image"
   },
   "git": {
     "changelog": "npx auto-changelog --stdout --commit-limit false --unreleased --template https://raw.githubusercontent.com/release-it/release-it/master/templates/changelog-compact.hbs"
+  },
+  "plugins": {
+    "@grupoboticario/news-fragments": {
+      "changelogFile": "CHANGELOG_NEW.md"
+    }
   }
 }

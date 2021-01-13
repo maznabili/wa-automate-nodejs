@@ -8,6 +8,8 @@ var io,
     open = require('open'),
     getPort = require('get-port'),
     url = require('url'),
+    osName = require('os-name'),
+    commandExists = require('command-exists'),
     gClient,
     serverSockets : any = {},
     PORT,
@@ -41,7 +43,7 @@ export async function popup(config: ConfigObject) {
     setUpApp();
     const preferredPort = config.popup;
     ev.on('**', async (data, sessionId, namespace) => {
-        if(namespace.includes("sessionData") || namespace.includes("DebugInfo")) return;
+        if(namespace.includes("sessionData")) return;
         if (gClient) {
             await gClient.send({ data, sessionId, namespace });
             if(data?.includes && data?.includes("ready for account")) {
@@ -76,13 +78,18 @@ export async function popup(config: ConfigObject) {
         });
     });
     server.listen(PORT);
-    if(!config?.inDocker) await open(`http://localhost:${PORT}${config?.qrPopUpOnly?`/qr`:``}`, { app: ['google chrome', '--incognito'], allowNonzeroExitCode: true}).catch(()=>{}); else return "NA";
-    return config?.qrPopUpOnly ?  `http://localhost:${PORT}/qr` : await new Promise(resolve => {
-        io.on('connection', function (client) {
-            gClient = client;
-            resolve(`http://localhost:${PORT}`);
-        });
+    
+    const os = osName();
+    const appName = os.includes('macOS') ? 'google chrome' : os.includes('Windows') ? 'chrome' : 'google-chrome';
+    io.on('connection', function (client) {
+        gClient = client;
     });
+    const hasChrome = await commandExists(appName).then(()=>true).catch(()=>false);
+    if(hasChrome){
+        if(!config?.inDocker) await open(`http://localhost:${PORT}${config?.qrPopUpOnly?`/qr`:``}`, { app: [config?.executablePath || appName , '--incognito'], allowNonzeroExitCode: true}).catch(()=>{}); else return "NA";
+    } else return `http://localhost:${PORT}${config?.qrPopUpOnly ? '/qr' : ''}`;
+
+    return `http://localhost:${PORT}${config?.qrPopUpOnly ? '/qr' : ''}`
 }
 
 export const closeHttp = async () => {

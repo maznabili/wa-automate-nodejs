@@ -16,7 +16,6 @@ export const getConfigWithCase = (config ?: {
     if(!config) config = defaultConfig;
     const schema = tsj.createGenerator(config).createSchema(config.type);
     const ignoredConfigs = [
-        'browserRevision',
         'useStealth',
         'chromiumArgs',
         'executablePath',
@@ -34,6 +33,11 @@ export const getConfigWithCase = (config ?: {
         if(key==='sessionData') {
             entry.type = 'string';
             entry.description = 'The base64 encoded sessionData used to restore a session.'
+            delete entry.anyOf;
+        }
+        if(key==='licenseKey') {
+            entry.type = 'string';
+            entry.description = 'The license key to use with the session.'
             delete entry.anyOf;
         }
         return {...entry,key}

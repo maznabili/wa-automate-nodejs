@@ -7,7 +7,9 @@ import { ParticipantChangedEventModel } from './model/group-metadata';
 import { useragent, puppeteerConfig } from '../config/puppeteer.config'
 import sharp from 'sharp';
 import { ConfigObject, STATE } from './model';
-import PQueue from 'p-queue'
+import { PageEvaluationTimeout } from './model/errors';
+import PQueue from 'p-queue';
+import { ev } from '../controllers/events';
 /** @ignore */
 const parseFunction = require('parse-function'),
 pkg = require('../../package.json'),
@@ -34,25 +36,75 @@ export enum namespace {
   GroupMetadata = 'GroupMetadata'
 }
 
+/**
+ * An enum of all the "simple listeners". A simple listener is a listener that just takes one parameter which is the callback function to handle the event.
+ */
 export enum SimpleListener {
+  /**
+   * Represents [[onMessage]]
+   */
   Message = 'onMessage',
+  /**
+   * Represents [[onAnyMessage]]
+   */
   AnyMessage = 'onAnyMessage',
+  /**
+   * Represents [[onMessageDeleted]]
+   */
   MessageDeleted = 'onMessageDeleted',
+  /**
+   * Represents [[onAck]]
+   */
   Ack = 'onAck',
+  /**
+   * Represents [[onAddedToGroup]]
+   */
   AddedToGroup = 'onAddedToGroup',
+  /**
+   * Represents [[onBattery]]
+   */
   Battery = 'onBattery',
+  /**
+   * Represents [[onChatOpened]]
+   */
   ChatOpened = 'onChatOpened',
+  /**
+   * Represents [[onIncomingCall]]
+   */
   IncomingCall = 'onIncomingCall',
+  /**
+   * Represents [[onGlobalParicipantsChanged]]
+   */
   GlobalParicipantsChanged = 'onGlobalParicipantsChanged',
+  /**
+   * Represents [[onChatState]]
+   */
   ChatState = 'onChatState',
   // Next two require extra params so not available to use via webhook register
   // LiveLocation = 'onLiveLocation',
   // ParticipantsChanged = 'onParticipantsChanged',
+  /**
+   * Represents [[onPlugged]]
+   */
   Plugged = 'onPlugged',
+  /**
+   * Represents [[onStateChanged]]
+   */
   StateChanged = 'onStateChanged',
-  //require licences
+  /**
+   * Requires licence
+   * Represents [[onStory]]
+   */
   Story = 'onStory',
+  /**
+   * Requires licence
+   * Represents [[onRemovedFromGroup]]
+   */
   RemovedFromGroup = 'onRemovedFromGroup',
+  /**
+   * Requires licence
+   * Represents [[onContactAdded]]
+   */
   ContactAdded = 'onContactAdded',
 }
 
@@ -80,12 +132,18 @@ async function convertMp4BufferToWebpDataUrl(file: DataURL | Buffer | Base64, pr
    * The amount of times the video loops in the sticker. To save processing time, leave this as 0
    * default `0`
    */
-  loop?: number
+  loop?: number,
+  /**
+   * Centres and crops the video.
+   * default `true`
+   */
+  crop?: boolean
 } = {
   fps: 10,
   startTime: `00:00:00.0`,
-  endTime :  `00:00:05.0`,
-  loop: 0
+  endTime:  `00:00:05.0`,
+  loop: 0,
+  crop: true
 }) {
   const tempFile = path.join(tmpdir(), `processing.${Crypto.randomBytes(6).readUIntLE(0, 6).toString(36)}.webp`);
   var stream = new (require('stream').Readable)();
@@ -105,7 +163,7 @@ async function convertMp4BufferToWebpDataUrl(file: DataURL | Buffer | Base64, pr
               console.log('Finished encoding');
               resolve(true)
           })
-          .addOutputOptions([`-vcodec`, `libwebp`, `-vf`, `crop=w='min(min(iw\,ih)\,500)':h='min(min(iw\,ih)\,500)',scale=500:500,setsar=1,fps=${processOptions.fps}`, `-loop`, `${processOptions.loop}`, `-ss`, processOptions.startTime, `-t`, processOptions.endTime, `-preset`, `default`, `-an`, `-vsync`, `0`, `-s`, `512:512`])
+          .addOutputOptions([`-vcodec`, `libwebp`, `-vf`, `${processOptions.crop?`crop=w='min(min(iw\,ih)\,500)':h='min(min(iw\,ih)\,500)',`:``}scale=500:500,setsar=1,fps=${processOptions.fps}`, `-loop`, `${processOptions.loop}`, `-ss`, processOptions.startTime, `-t`, processOptions.endTime, `-preset`, `default`, `-an`, `-vsync`, `0`, `-s`, `512:512`])
           .toFormat("webp")
           .save(tempFile);
   })
@@ -180,6 +238,7 @@ declare module WAPI {
   const onLiveLocation: (chatId: string, callback: Function) => any;
   const getSingleProperty: (namespace: string, id: string, property : string) => any;
   const sendMessage: (to: string, content: string) => Promise<string>;
+  const setChatEphemeral: (chatId: string, ephemeral: boolean) => Promise<boolean>;
   const downloadFileWithCredentials: (url: string) => Promise<string>;
   const sendMessageWithMentions: (to: string, content: string) => Promise<string>;
   const tagEveryone: (groupId: string, content: string) => Promise<string>;
@@ -192,7 +251,7 @@ declare module WAPI {
   const getGeneratedUserAgent: (userAgent?: string) => string;
   const forwardMessages: (to: string, messages: string | (string | Message)[], skipMyMessages: boolean) => any;
   const sendLocation: (to: string, lat: any, lng: any, loc: string) => Promise<string>;
-  const addParticipant: (groupId: string, contactId: string) => void;
+  const addParticipant: (groupId: string, contactId: string) => Promise<boolean | string>;
   const sendGiphyAsSticker: (chatId: string, url: string) => Promise<any>;
   const getMessageById: (mesasgeId: string) => Message;
   const getMyLastMessage: (chatId: string) => Message;
@@ -208,10 +267,10 @@ declare module WAPI {
   const forceUpdateLiveLocation: (chatId: string) => Promise<LiveLocationChangedEvent []> | boolean;
   const setGroupIcon: (groupId: string, imgData: string) => Promise<boolean>;
   const getGroupAdmins: (groupId: string) => Promise<ContactId[]>;
-  const removeParticipant: (groupId: string, contactId: string) => Promise<boolean>;
+  const removeParticipant: (groupId: string, contactId: string) => Promise<boolean | string>;
   const addOrRemoveLabels: (label: string, id: string, type: string) => Promise<boolean>;
-  const promoteParticipant: (groupId: string, contactId: string) => Promise<boolean>;
-  const demoteParticipant: (groupId: string, contactId: string) => Promise<boolean>;
+  const promoteParticipant: (groupId: string, contactId: string) => Promise<boolean | string>;
+  const demoteParticipant: (groupId: string, contactId: string) => Promise<boolean | string>;
   const setGroupToAdminsOnly: (groupId: string, onlyAdmins: boolean) => Promise<boolean>;
   const setGroupEditToAdminsOnly: (groupId: string, onlyAdmins: boolean) => Promise<boolean>;
   const setGroupDescription: (groupId: string, description: string) => Promise<boolean>;
@@ -222,7 +281,7 @@ declare module WAPI {
   const sendCustomProduct: (to: ChatId, image: DataURL, productData: CustomProduct) => Promise<string | boolean>;
   const sendSeen: (to: string) => Promise<boolean>;
   const markAsUnread: (to: string) => Promise<boolean>;
-  const isChatOnline: (id: string) => Promise<boolean>;
+  const isChatOnline: (id: string) => Promise<boolean | string>;
   const sendLinkWithAutoPreview: (to: string,url: string,text: string) => Promise<string | boolean>;
   const contactBlock: (id: string) => Promise<boolean>;
   const checkReadReceipts: (contactId: string) => Promise<boolean | string>;
@@ -241,7 +300,8 @@ declare module WAPI {
     caption: string,
     quotedMsgId?: string,
     waitForId?: boolean,
-    ptt?: boolean
+    ptt?: boolean,
+    withoutPreview?: boolean
   ) => Promise<string>;
   const sendMessageWithThumb: (
     thumb: string,
@@ -300,6 +360,7 @@ declare module WAPI {
   const getHostNumber: () => string;
   const getAllGroups: () => Chat[];
   const getGroupParticipantIDs: (groupId: string) => Promise<string[]>;
+  const getGroupInfo: (groupId: string) => Promise<any>;
   const joinGroupViaLink: (link: string) => Promise<string | boolean | number>;
   const leaveGroup: (groupId: string) => any;
   const getVCards: (msgId: string) => any;
@@ -333,6 +394,7 @@ declare module WAPI {
 export class Client {
   private _loadedModules: any[];
   private _registeredWebhooks: any;
+  private _registeredEvListeners: any;
   private _webhookQueue: any;
   private _createConfig: ConfigObject;
   private _sessionInfo: SessionInfo;
@@ -350,7 +412,14 @@ export class Client {
     this._loadedModules = [];
     this._sessionInfo = sessionInfo;
     this._listeners = {};
+    if(this._createConfig?.eventMode) {
+      this.registerAllSimpleListenersOnEv();
+    }
     this._setOnClose();
+  }
+
+  private registerAllSimpleListenersOnEv(){
+    Object.keys(SimpleListener).map(eventKey => this.registerEv(SimpleListener[eventKey]))
   }
 
   getSessionId(){
@@ -438,10 +507,11 @@ export class Client {
   private async pup(pageFunction:EvaluateFn<any>, ...args) {
     if(this._createConfig?.safeMode) {
       if(!this._page || this._page.isClosed()) throw 'page closed';
-      const state = await this.getConnectionState();
+      const state = await this.forceUpdateConnectionState();
       if(state!==STATE.CONNECTED) throw `state: ${state}`
     }
-    return this._page.evaluate(pageFunction, ...args)
+    if(this._createConfig?.callTimeout) return await Promise.race([this._page.evaluate(pageFunction, ...args),new Promise((resolve, reject) => setTimeout(reject, this._createConfig?.callTimeout, new PageEvaluationTimeout()))])
+    return this._page.evaluate(pageFunction, ...args);
   }
 
   /**
@@ -452,15 +522,26 @@ export class Client {
     * 
     */
   private async registerListener(funcName:SimpleListener, fn: any){
+    if(this._registeredEvListeners && this._registeredEvListeners[funcName]) {
+      return ev.on(`${funcName}.${this.getSessionId()}`,({data})=>fn(data));
+    }
+    /**
+     * If evMode is on then make the callback come from ev.
+     */
     //add a reference to this callback
     const set = () => this.pup(({funcName}) => {
       //@ts-ignore
       return window[funcName] ? WAPI[`${funcName}`](obj => window[funcName](obj)) : false
     },{funcName});
+    if(this._listeners[funcName]) {
+      console.log('listener already set');
+      return true
+    }
     this._listeners[funcName] = fn;
     const exists = await this.pup(({funcName})=>window[funcName]?true:false,{funcName});
     if(exists) return await set();
-    return this._page.exposeFunction(funcName, (obj: any) =>fn(obj)).then(set).catch(e=>set);
+    const res = await this._page.exposeFunction(funcName, (obj: any) =>fn(obj)).then(set).catch(e=>set) as Promise<boolean>;
+    return res;
   }
   
   // NON-STAMDARD LISTENERS
@@ -504,7 +585,7 @@ export class Client {
     return this.registerListener(SimpleListener.AnyMessage, fn);
   }
   /**
-   * [REQUIRES AN INSIDERS LICENSE-KEY](https://gumroad.com/l/BTMt?tier=Insiders%20Program)
+   * [REQUIRES AN INSIDERS LICENSE-KEY](https://gum.co/open-wa?tier=Insiders%20Program)
    * 
    * Listens to when a message is deleted by a recipient or the host account
 
@@ -577,7 +658,7 @@ export class Client {
   }
 
   /**
-   * [REQUIRES AN INSIDERS LICENSE-KEY](https://gumroad.com/l/BTMt?tier=Insiders%20Program)
+   * [REQUIRES AN INSIDERS LICENSE-KEY](https://gum.co/open-wa?tier=Insiders%20Program)
    * 
    * Listens to chat state, including when a specific user is recording and typing within a group chat.
    * 
@@ -600,8 +681,9 @@ export class Client {
   /**
    * Listens to messages acknowledgement Changes
    * 
+   * @param fn callback function that handles a [[Message]] as the first and only parameter.
    * @event 
-   * @returns Observable stream of messages
+   * @returns `true` if the callback was registered
    */
   public async onAck(fn: (message: Message) => void) {
     return this.registerListener(SimpleListener.Ack, fn);
@@ -611,8 +693,8 @@ export class Client {
    * Listens to add and remove events on Groups on a global level. It is memory efficient and doesn't require a specific group id to listen to.
    * 
    * @event
-   * @param fn callback
-   * @returns Observable stream of participantChangedEvent
+   * @param fn callback function that handles a [[ParticipantChangedEventModel]] as the first and only parameter.
+   * @returns `true` if the callback was registered
    */
   public async onGlobalParicipantsChanged(fn: (participantChangedEvent: ParticipantChangedEventModel) => void) {
     return this.registerListener(SimpleListener.GlobalParicipantsChanged, fn);
@@ -622,8 +704,8 @@ export class Client {
    * Fires callback with Chat object every time the host phone is added to a group.
    * 
    * @event 
-   * @param to callback
-   * @returns Observable stream of Chats
+   * @param fn callback function that handles a [[Chat]] (group chat) as the first and only parameter.
+   * @returns `true` if the callback was registered
    */
   public async onAddedToGroup(fn: (chat: Chat) => any) {
     return this.registerListener(SimpleListener.AddedToGroup, fn);
@@ -631,45 +713,45 @@ export class Client {
   
 
   /**
-   * [REQUIRES AN INSIDERS LICENSE-KEY](https://gumroad.com/l/BTMt?tier=Insiders%20Program)
+   * [REQUIRES AN INSIDERS LICENSE-KEY](https://gum.co/open-wa?tier=Insiders%20Program)
    * 
    * Fires callback with Chat object every time the host phone is added to a group.
    * 
    * @event 
-   * @param to callback
-   * @returns Observable stream of Chats
+   * @param fn callback function that handles a [[Chat]] (group chat) as the first and only parameter.
+   * @returns `true` if the callback was registered
    */
   public async onRemovedFromGroup(fn: (chat: Chat) => any) {
     return this.registerListener(SimpleListener.RemovedFromGroup, fn);
   }
 
   /**
-   * [REQUIRES AN INSIDERS LICENSE-KEY](https://gumroad.com/l/BTMt?tier=Insiders%20Program)
+   * [REQUIRES AN INSIDERS LICENSE-KEY](https://gum.co/open-wa?tier=Insiders%20Program)
    * 
    * Fires callback with the relevant chat id every time the user clicks on a chat. This will only work in headful mode.
    * 
    * @event 
-   * @param to callback
-   * @returns Observable stream of Chat ids.
+   * @param fn callback function that handles a [[ChatId]] as the first and only parameter.
+   * @returns `true` if the callback was registered
    */
   public async onChatOpened(fn: (chat: Chat) => any) {
     return this.registerListener(SimpleListener.ChatOpened, fn);
   }
 
   /**
-   * [REQUIRES AN INSIDERS LICENSE-KEY](https://gumroad.com/l/BTMt?tier=Insiders%20Program)
+   * [REQUIRES AN INSIDERS LICENSE-KEY](https://gum.co/open-wa?tier=Insiders%20Program)
    * 
    * Fires callback with contact id when a new contact is added on the host phone.
    * 
    * @event 
-   * @param to callback
-   * @returns Observable stream of contact ids
+   * @param fn callback function that handles a [[Chat]] as the first and only parameter.
+   * @returns `true` if the callback was registered
    */
   public async onContactAdded(fn: (chat: Chat) => any) {
     return this.registerListener(SimpleListener.ChatOpened, fn);
   }
 
-  // cOMPLEX LISTENERS
+  // COMPLEX LISTENERS
 
   /**
    * @event 
@@ -844,13 +926,20 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
     return true;
   }
 
+  /**
+   * This is a convinient method to click the `Use Here` button in the WA web session.
+   * 
+   * Use this when [[STATE]] is `CONFLICT`. You can read more about managing state here:
+   * 
+   * [[Detecting Logouts]]
+   */
   public async forceRefocus() {
     const useHere: string = await this._page.evaluate(()=>WAPI.getUseHereString());
     await this._page.waitForFunction(
-      `[...document.querySelectorAll("div[role=button")].find(e=>{return e.innerHTML.toLowerCase()==="${useHere.toLowerCase()}"})`,
+      `[...document.querySelectorAll("div[role=button")].find(e=>{return e.innerHTML.toLowerCase().includes("${useHere.toLowerCase()}")})`,
       { timeout: 0 }
     );
-    return await this._page.evaluate(`[...document.querySelectorAll("div[role=button")].find(e=>{return e.innerHTML.toLowerCase()=="${useHere.toLowerCase()}"}).click()`);
+    return await this._page.evaluate(`[...document.querySelectorAll("div[role=button")].find(e=>{return e.innerHTML.toLowerCase().includes("${useHere.toLowerCase()}")}).click()`);
   }
 
   
@@ -872,7 +961,7 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
 
   /**
    * Sends a text message to given chat
-   * If you need to send a message to new numbers please see these instructions: https://github.com/open-wa/wa-automate-nodejs#starting-a-conversation
+   * If you need to send a message to new numbers please see [these instructions:](https://docs.openwa.dev/pages/The%20Client/licensed-features.html#sending-messages-to-non-contact-numbers)
    * @param to chat id: xxxxx@c.us
    * @param content text message
    */
@@ -917,7 +1006,7 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
   }
 
   /**
-   * [REQUIRES AN INSIDERS LICENSE-KEY](https://gumroad.com/l/BTMt?tier=Insiders%20Program)
+   * [REQUIRES AN INSIDERS LICENSE-KEY](https://gum.co/open-wa?tier=Insiders%20Program)
    * 
    * Sends a reply to given chat that includes mentions, replying to the provided replyMessageId.
    * In order to use this method correctly you will need to send the text like this:
@@ -941,7 +1030,7 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
 
 
   /**
-   * [REQUIRES AN INSIDERS LICENSE-KEY](https://gumroad.com/l/BTMt?tier=Insiders%20Program)
+   * [REQUIRES AN INSIDERS LICENSE-KEY](https://gum.co/open-wa?tier=Insiders%20Program)
    * 
    * Tags everyone in the group with a message
    * 
@@ -1051,7 +1140,7 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
    * @param file DataURL data:image/xxx;base64,xxx or the RELATIVE (should start with `./` or `../`) path of the file you want to send. With the latest version, you can now set this to a normal URL (for example [GET] `https://file-examples-com.github.io/uploads/2017/10/file_example_JPG_2500kB.jpg`).
    * @param filename string xxxxx
    * @param caption string xxxxx
-   * @param waitForKey boolean default: false set this to true if you want to wait for the id of the message. By default this is set to false as it will take a few seconds to retreive to the key of the message and this waiting may not be desirable for the majority of users.
+   * @param waitForKey boolean default: false set this to true if you want to wait for the id of the message. By default this is set to false as it will take a few seconds to retrieve to the key of the message and this waiting may not be desirable for the majority of users.
    * @returns Promise <boolean | string> This will either return true or the id of the message. It will return true after 10 seconds even if waitForId is true
    */
   public async sendImage(
@@ -1061,7 +1150,8 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
     caption: Content,
     quotedMsgId?: MessageId,
     waitForId?: boolean,
-    ptt?:boolean
+    ptt?:boolean,
+    withoutPreview?:boolean
   ) {
       //check if the 'base64' file exists
       if(!isDataURL(file)) {
@@ -1070,7 +1160,7 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
         if(fs.existsSync(file) || fs.existsSync(relativePath)) {
           file = await datauri(fs.existsSync(file)  ? file : relativePath);
         } else if(isUrl(file)){
-          return await this.sendFileFromUrl(to,file,filename,caption,quotedMsgId,{},waitForId,ptt);
+          return await this.sendFileFromUrl(to,file,filename,caption,quotedMsgId,{},waitForId,ptt,withoutPreview);
         } else throw new Error('Cannot find file. Make sure the file reference is relative, a valid URL or a valid DataURL')
       }
     
@@ -1082,8 +1172,8 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
    ];
 
     let res = await this.pup(
-      ({ to, file, filename, caption, quotedMsgId, waitForId, ptt}) =>  WAPI.sendImage(file, to, filename, caption, quotedMsgId, waitForId, ptt),
-      { to, file, filename, caption, quotedMsgId, waitForId, ptt }
+      ({ to, file, filename, caption, quotedMsgId, waitForId, ptt, withoutPreview}) =>  WAPI.sendImage(file, to, filename, caption, quotedMsgId, waitForId, ptt, withoutPreview),
+      { to, file, filename, caption, quotedMsgId, waitForId, ptt, withoutPreview}
     )
     if(err.includes(res)) console.error(res);
     return (err.includes(res) ? false : res)  as MessageId | boolean;
@@ -1136,7 +1226,7 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
   }
 
   /**
-   * [REQUIRES AN INSIDERS LICENSE-KEY](https://gumroad.com/l/BTMt?tier=Insiders%20Program)
+   * [REQUIRES AN INSIDERS LICENSE-KEY](https://gum.co/open-wa?tier=Insiders%20Program)
    * 
    * Check if a recipient has read receipts on.
    * 
@@ -1158,9 +1248,11 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
    * @param to chat id xxxxx@c.us
    * @param file DataURL data:image/xxx;base64,xxx or the RELATIVE (should start with `./` or `../`) path of the file you want to send. With the latest version, you can now set this to a normal URL (for example [GET] `https://file-examples-com.github.io/uploads/2017/10/file_example_JPG_2500kB.jpg`).
    * @param filename string xxxxx
-   * @param caption string xxxxx
+   * @param caption string xxxxx With an [INSIDERS LICENSE-KEY](https://gum.co/open-wa?tier=Insiders%20Program) you can also tag people in groups with `@[number]`. For example if you want to mention the user with the number `44771234567`, just add `@44771234567` in the caption.
    * @param quotedMsgId string true_0000000000@c.us_JHB2HB23HJ4B234HJB to send as a reply to a message
-   * @param waitForId boolean default: false set this to true if you want to wait for the id of the message. By default this is set to false as it will take a few seconds to retreive to the key of the message and this waiting may not be desirable for the majority of users.
+   * @param waitForId boolean default: false set this to true if you want to wait for the id of the message. By default this is set to false as it will take a few seconds to retrieve to the key of the message and this waiting may not be desirable for the majority of users.
+   * @param ptt boolean default: false set this to true if you want to send the file as a push to talk file.
+   * @param withoutPreview boolean default: false set this to true if you want to send the file without a preview (i.e as a file). This is useful for preventing auto downloads on recipient devices.
    * @returns Promise <boolean | string> This will either return true or the id of the message. It will return true after 10 seconds even if waitForId is true
    */
   public async sendFile(
@@ -1170,9 +1262,10 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
     caption: Content,
     quotedMsgId?: MessageId,
     waitForId?: boolean,
-    ptt?:boolean
+    ptt?:boolean,
+    withoutPreview?:boolean
   ) {
-    return this.sendImage(to, file, filename, caption, quotedMsgId, waitForId, ptt);
+    return this.sendImage(to, file, filename, caption, quotedMsgId, waitForId, ptt, withoutPreview);
   }
 
 
@@ -1208,21 +1301,33 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
   /**
    * Sends a video to given chat as a gif, with caption or not, using base64
    * @param to chat id xxxxx@c.us
-   * @param base64 base64 data:image/xxx;base64,xxx or the path of the file you want to send.
+   * @param file DataURL data:image/xxx;base64,xxx or the RELATIVE (should start with `./` or `../`) path of the file you want to send. With the latest version, you can now set this to a normal URL (for example [GET] `https://file-examples-com.github.io/uploads/2017/10/file_example_JPG_2500kB.jpg`).
    * @param filename string xxxxx
    * @param caption string xxxxx
    * @param quotedMsgId string true_0000000000@c.us_JHB2HB23HJ4B234HJB to send as a reply to a message
+   * @param requestConfig {} By default the request is a get request, however you can override that and many other options by sending this parameter. You can read more about this parameter here: https://github.com/axios/axios#request-config
    */
   public async sendVideoAsGif(
     to: ChatId,
     file: DataURL | FilePath,
     filename: string,
     caption: Content,
-    quotedMsgId?: MessageId
+    quotedMsgId?: MessageId,
+    requestConfig: any ={}
   ) {
+      //check if the 'base64' file exists
+      if(!isDataURL(file)) {
+        //must be a file then
+        let relativePath = path.join(path.resolve(process.cwd(),file|| ''));
+        if(fs.existsSync(file) || fs.existsSync(relativePath)) {
+          file = await datauri(fs.existsSync(file)  ? file : relativePath);
+        } else if(isUrl(file)){
+          file = await getDUrl(file, requestConfig);
+        } else throw new Error('Cannot find file. Make sure the file reference is relative, a valid URL or a valid DataURL')
+      }
     return await this.pup(
       ({ to, file, filename, caption, quotedMsgId  }) => {
-        WAPI.sendVideoAsGif(file, to, filename, caption, quotedMsgId );
+        return WAPI.sendVideoAsGif(file, to, filename, caption, quotedMsgId );
       },
       { to, file, filename, caption, quotedMsgId }
     ) as Promise<MessageId>;
@@ -1266,8 +1371,9 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
    * @param caption string xxxxx
    * @param quotedMsgId string true_0000000000@c.us_JHB2HB23HJ4B234HJB to send as a reply to a message
    * @param requestConfig {} By default the request is a get request, however you can override that and many other options by sending this parameter. You can read more about this parameter here: https://github.com/axios/axios#request-config
-   * @param waitForId boolean default: false set this to true if you want to wait for the id of the message. By default this is set to false as it will take a few seconds to retreive to the key of the message and this waiting may not be desirable for the majority of users.
-
+   * @param waitForId boolean default: false set this to true if you want to wait for the id of the message. By default this is set to false as it will take a few seconds to retrieve to the key of the message and this waiting may not be desirable for the majority of users.
+   * @param ptt boolean default: false set this to true if you want to send the file as a push to talk file.
+   * @param withoutPreview boolean default: false set this to true if you want to send the file without a preview (i.e as a file). This is useful for preventing auto downloads on recipient devices.
    */
   public async sendFileFromUrl(
     to: ChatId,
@@ -1277,11 +1383,12 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
     quotedMsgId?: MessageId,
     requestConfig: any = {},
     waitForId?: boolean,
-    ptt?:boolean
+    ptt?:boolean,
+    withoutPreview?:boolean
   ) {
     try {
      const base64 = await getDUrl(url, requestConfig);
-      return await this.sendFile(to,base64,filename,caption,quotedMsgId,waitForId,ptt)
+      return await this.sendFile(to,base64,filename,caption,quotedMsgId,waitForId,ptt,withoutPreview)
     } catch(error) {
       console.log('Something went wrong', error);
       throw error;
@@ -1337,7 +1444,6 @@ public async iAmAdmin(){
    * Find any product listings of the given number. Use this to query a catalog
    *
    * @param id id of buseinss profile (i.e the number with @c.us)
-   * @param done Optional callback function for async execution
    * @returns None
    */
   public async getBusinessProfilesProducts(id: ContactId) {
@@ -1355,7 +1461,6 @@ public async iAmAdmin(){
    * @param caption string the caption you want to add to this message
    * @param bizNumber string the @c.us number of the business account from which you want to grab the product
    * @param productId string the id of the product within the main catalog of the aforementioned business
-   * @param done - function - Callback function to be called contained the buffered messages.
    * @returns 
    */
   public async sendImageWithProduct(
@@ -1519,7 +1624,7 @@ public async iAmAdmin(){
 
 
   /**
-   * Retreives all Chat Ids
+   * retrieves all Chat Ids
    * @returns array of [ChatId]
    */
   public async getAllChatIds() {
@@ -1527,7 +1632,7 @@ public async iAmAdmin(){
   }
 
   /**
-   * Retreives an array of IDs of accounts blocked by the host account.
+   * retrieves an array of IDs of accounts blocked by the host account.
    * @returns Promise<ChatId[]>
    */
   public async getBlockedIds() {
@@ -1573,6 +1678,17 @@ public async iAmAdmin(){
     ) as Promise<string[]>;
   }
 
+  /**
+   * Returns the title and description of a given group id.
+   * @param groupId group id
+   */
+  public async getGroupInfo(groupId: GroupChatId) {
+    return await this.pup(
+      groupId => WAPI.getGroupInfo(groupId),
+      groupId
+    ) as Promise<any>;
+  }
+
   
 /** Joins a group via the invite link, code, or message
  * @param link This param is the string which includes the invite link or code. The following work:
@@ -1604,7 +1720,7 @@ public async contactBlock(id: ContactId) {
 /**
  * Report a contact for spam, block them and attempt to clear chat.
  * 
- * [This is a restricted feature and requires a restricted key.](https://gumroad.com/l/BTMt?tier=1%20Restricted%20License%20Key)
+ * [This is a restricted feature and requires a restricted key.](https://gum.co/open-wa?tier=1%20Restricted%20License%20Key)
  * 
  * @param {string} id '000000000000@c.us'
  */
@@ -1717,9 +1833,9 @@ public async contactUnblock(id: ContactId) {
 
   /**
    * 
-   * [REQUIRES AN INSIDERS LICENSE-KEY](https://gumroad.com/l/BTMt?tier=Insiders%20Program)
+   * [REQUIRES AN INSIDERS LICENSE-KEY](https://gum.co/open-wa?tier=Insiders%20Program)
    * 
-   * Retreives a message object which results in a valid sticker instead of a blank one. This also works with animated stickers.
+   * Retrieves a message object which results in a valid sticker instead of a blank one. This also works with animated stickers.
    * 
    * If you run this without a valid insiders key, it will return false and cause an error upon decryption.
    * 
@@ -1742,7 +1858,7 @@ public async contactUnblock(id: ContactId) {
 
   /**
    * 
-   * [REQUIRES AN INSIDERS LICENSE-KEY](https://gumroad.com/l/BTMt?tier=Insiders%20Program)
+   * [REQUIRES AN INSIDERS LICENSE-KEY](https://gum.co/open-wa?tier=Insiders%20Program)
    * 
    * If a file is old enough, it will 404 if you try to decrypt it. This will allow you to force the host account to re upload the file and return a decryptable message.
    * 
@@ -1775,7 +1891,7 @@ public async contactUnblock(id: ContactId) {
   }
 
   /**
-   * [REQUIRES AN INSIDERS LICENSE-KEY](https://gumroad.com/l/BTMt?tier=Insiders%20Program)
+   * [REQUIRES AN INSIDERS LICENSE-KEY](https://gum.co/open-wa?tier=Insiders%20Program)
    * 
    * Retrieves the groups that you have in common with a contact
    * @param contactId
@@ -1847,14 +1963,17 @@ public async contactUnblock(id: ContactId) {
   }
   
   /**
-   * Checks if a CHAT contact is online. Not entirely sure if this works with groups.
+   * Checks if a chat contact is online. Not entirely sure if this works with groups.
+   * 
+   * It will return `true` if the chat is `online`, `false` if the chat is `offline`, `PRIVATE` if the privacy settings of the contact do not allow you to see their status and `NO_CHAT` if you do not currently have a chat with that contact.
+   * 
    * @param chatId chat id: xxxxx@c.us
    */
   public async isChatOnline(chatId: ChatId) {
     return await this.pup(
      chatId => WAPI.isChatOnline(chatId),
       chatId
-    ) as Promise<boolean>;
+    ) as Promise<boolean | string>;
   }
 
 
@@ -1920,7 +2039,7 @@ public async getStatus(contactId: ContactId) {
   }
 
   /**
-    * Retreives an invite link for a group chat. returns false if chat is not a group.
+    * Retrieves an invite link for a group chat. returns false if chat is not a group.
    * @param chatId
    * @returns Promise<string>
    */
@@ -2089,9 +2208,13 @@ public async getStatus(contactId: ContactId) {
 
   /**
    * Remove participant of Group
+   * 
+   * If not a group chat, returns `NOT_A_GROUP_CHAT`.
+   * 
+   * If the chat does not exist, returns `GROUP_DOES_NOT_EXIST`
+   * 
    * @param {*} groupId '0000000000-00000000@g.us'
    * @param {*} participantId '000000000000@c.us'
-   * @param {*} done - function - Callback function to be called when a new message arrives.
    */
   public async removeParticipant(groupId: GroupChatId, participantId: ContactId) {
     return await this.pup(
@@ -2140,9 +2263,13 @@ public async getStatus(contactId: ContactId) {
 
   /**
   * Add participant to Group
+  * 
+  * If not a group chat, returns `NOT_A_GROUP_CHAT`.
+  * 
+  * If the chat does not exist, returns `GROUP_DOES_NOT_EXIST`
   * @param {*} groupId '0000000000-00000000@g.us'
   * @param {*} participantId '000000000000@c.us'
-  * @param {*} done - function - Callback function to be called when a new message arrives.
+  * 
   */
 
   public async addParticipant(groupId: GroupChatId, participantId: ContactId) {
@@ -2154,9 +2281,14 @@ public async getStatus(contactId: ContactId) {
 
   /**
   * Promote Participant to Admin in Group
+  * 
+  * 
+  * If not a group chat, returns `NOT_A_GROUP_CHAT`.
+  * 
+  * If the chat does not exist, returns `GROUP_DOES_NOT_EXIST`
+  * 
   * @param {*} groupId '0000000000-00000000@g.us'
   * @param {*} participantId '000000000000@c.us'
-  * @param {*} done - function - Callback function to be called when a new message arrives.
   */
 
   public async promoteParticipant(groupId: GroupChatId, participantId: ContactId) {
@@ -2168,6 +2300,11 @@ public async getStatus(contactId: ContactId) {
 
   /**
   * Demote Admin of Group
+  * 
+  * If not a group chat, returns `NOT_A_GROUP_CHAT`.
+  * 
+  * If the chat does not exist, returns `GROUP_DOES_NOT_EXIST`
+  * 
   * @param {*} groupId '0000000000-00000000@g.us'
   * @param {*} participantId '000000000000@c.us'
   */
@@ -2207,7 +2344,7 @@ public async getStatus(contactId: ContactId) {
 }
 
   /**
-   * [REQUIRES AN INSIDERS LICENSE-KEY](https://gumroad.com/l/BTMt?tier=Insiders%20Program)
+   * [REQUIRES AN INSIDERS LICENSE-KEY](https://gum.co/open-wa?tier=Insiders%20Program)
    * 
   * Change the group chant description
   * @param groupId '0000000000-00000000@g.us' the group id.
@@ -2222,7 +2359,7 @@ public async getStatus(contactId: ContactId) {
 }
 
   /**
-   * [REQUIRES AN INSIDERS LICENSE-KEY](https://gumroad.com/l/BTMt?tier=Insiders%20Program)
+   * [REQUIRES AN INSIDERS LICENSE-KEY](https://gum.co/open-wa?tier=Insiders%20Program)
    * 
   * Change the group chat title
   * @param groupId '0000000000-00000000@g.us' the group id.
@@ -2248,7 +2385,7 @@ public async getStatus(contactId: ContactId) {
   }
 
   /**
-   * [REQUIRES AN INSIDERS LICENSE-KEY](https://gumroad.com/l/BTMt?tier=Insiders%20Program)
+   * [REQUIRES AN INSIDERS LICENSE-KEY](https://gum.co/open-wa?tier=Insiders%20Program)
    * 
    * Set the wallpaper background colour
    * @param {string} hex '#FFF123'
@@ -2275,6 +2412,7 @@ public async getStatus(contactId: ContactId) {
 
   /**
    * Returns an array of contacts that have read the message. If the message does not exist, it will return an empty array. If the host account has disabled read receipts this may not work!
+   * Each of these contact objects have a property `t` which represents the time at which that contact read the message.
    * @param messageId The message id
    */
   public async getMessageReaders(messageId: MessageId) {
@@ -2303,7 +2441,7 @@ public async getStatus(contactId: ContactId) {
   }
 
   /**
-   * [REQUIRES AN INSIDERS LICENSE-KEY](https://gumroad.com/l/BTMt?tier=Insiders%20Program)
+   * [REQUIRES AN INSIDERS LICENSE-KEY](https://gum.co/open-wa?tier=Insiders%20Program)
    * 
    * Sends a sticker from a given URL
    * @param to The recipient id.
@@ -2326,7 +2464,7 @@ public async getStatus(contactId: ContactId) {
   
 
   /**
-   * [REQUIRES AN INSIDERS LICENSE-KEY](https://gumroad.com/l/BTMt?tier=Insiders%20Program)
+   * [REQUIRES AN INSIDERS LICENSE-KEY](https://gum.co/open-wa?tier=Insiders%20Program)
    * 
    * This function takes an image and sends it as a sticker to the recipient as a reply to another message.
    * 
@@ -2436,11 +2574,17 @@ public async getStatus(contactId: ContactId) {
      * default `0`
      */
     loop?: number
+    /**
+     * Centres and crops the video.
+     * default `true`
+     */
+    crop?: boolean
   } = {
     fps: 10,
     startTime: `00:00:00.0`,
     endTime :  `00:00:05.0`,
-    loop: 0
+    loop: 0,
+    crop: true
   }) {
       if(typeof file === 'string') {
       if(!isDataURL(file)) {
@@ -2486,6 +2630,21 @@ public async getStatus(contactId: ContactId) {
   }
 
   /**
+   * [REQUIRES AN INSIDERS LICENSE-KEY](https://gum.co/open-wa?tier=Insiders%20Program)
+   * 
+   * Turn the ephemeral setting in a chat to on or off
+   * @param chatId The ID of the chat
+   * @param ephemeral `true` to turn on the ephemeral setting, `false` to turn off the ephemeral setting. Please note, if the setting is already on the requested setting, this method will return `true`.
+   * @returns Promise<boolean> true if the setting was set, `false` if the chat does not exist
+   */
+  public async setChatEphemeral(chatId: ChatId, ephemeral: boolean){
+    return await this.pup(
+      ({ chatId,  ephemeral}) => WAPI.setChatEphemeral(chatId,  ephemeral),
+      { chatId,  ephemeral }
+    );
+  }
+
+  /**
    * Send a giphy GIF as an animated sticker.
    * @param to ChatId
    * @param giphyMediaUrl URL | string This is the giphy media url and has to be in the format `https://media.giphy.com/media/RJKHjCAdsAfQPn03qQ/source.gif` or it can be just the id `RJKHjCAdsAfQPn03qQ`
@@ -2498,7 +2657,7 @@ public async getStatus(contactId: ContactId) {
   }
   
   /**
-   * [REQUIRES A TEST STORY LICENSE-KEY](https://gumroad.com/l/BTMt)
+   * [REQUIRES A TEXT STORY LICENSE-KEY](https://gum.co/open-wa)
    * 
    * Sends a formatted text story.
    * @param text The text to be displayed in the story 
@@ -2521,7 +2680,7 @@ public async getStatus(contactId: ContactId) {
   }
 
   /**
-   * [REQUIRES AN IMAGE STORY LICENSE-KEY](https://gumroad.com/l/BTMt)
+   * [REQUIRES AN IMAGE STORY LICENSE-KEY](https://gum.co/open-wa)
    * 
    * Posts an image story.
    * @param data data url string `data:[<MIME-type>][;charset=<encoding>][;base64],<data>`
@@ -2536,7 +2695,7 @@ public async getStatus(contactId: ContactId) {
   }
 
   /**
-   * [REQUIRES A VIDEO STORY LICENSE-KEY](https://gumroad.com/l/BTMt)
+   * [REQUIRES A VIDEO STORY LICENSE-KEY](https://gum.co/open-wa)
    * 
    * Posts a video story.
    * @param data data url string `data:[<MIME-type>][;charset=<encoding>][;base64],<data>`
@@ -2572,7 +2731,7 @@ public async getStatus(contactId: ContactId) {
   }
 
   /**
-   * Retreives all existing statuses.
+   * retrieves all existing statuses.
    *
    * Only works with a Story License Key
    */
@@ -2582,7 +2741,7 @@ public async getStatus(contactId: ContactId) {
 
     
   /**
-     * Retreives an array of user ids that have 'read' your story.
+     * Retrieves an array of user ids that have 'read' your story.
      * 
      * @param id string The id of the story
      * 
@@ -2594,7 +2753,7 @@ public async getStatus(contactId: ContactId) {
   
 
     /**
-     * [REQUIRES AN INSIDERS LICENSE-KEY](https://gumroad.com/l/BTMt?tier=Insiders%20Program)
+     * [REQUIRES AN INSIDERS LICENSE-KEY](https://gum.co/open-wa?tier=Insiders%20Program)
      * 
      * Clears all chats of all messages. This does not delete chats. Please be careful with this as it will remove all messages from whatsapp web and the host device. This feature is great for privacy focussed bots.
      */
@@ -2756,9 +2915,32 @@ public async getStatus(contactId: ContactId) {
   }
 
   /**
+   * Retreives a list of [[SimpleListener]] that are registered to webhooks.
+   */
+  public async listWebhooks(){
+    return Object.keys(this._registeredWebhooks) as SimpleListener[];
+  }
+
+  /**
+   * Removes a webhook.
+   * 
+   * Returns `true` if the webhook was found and removed. `false` if the webhook was not found and therefore could not be removed.
+   * 
+   * @param simpleListener The webhook name to remove.
+   * @retruns boolean
+   */
+  public async removeWebhook(simpleListener: SimpleListener){
+    if(this?._registeredWebhooks[simpleListener]) {
+      delete this._registeredWebhooks[simpleListener];
+      return true; //`Webhook for ${simpleListener} removed`
+    }
+    return false; //`Webhook for ${simpleListener} not found`
+  }
+  
+  /**
    * The client can now automatically handle webhooks. Use this method to register webhooks.
    * 
-   * @param event use SimpleListener enum
+   * @param event use [[SimpleListener]] enum
    * @param url The webhook url
    * @param requestConfig {} By default the request is a post request, however you can override that and many other options by sending this parameter. You can read more about this parameter here: https://github.com/axios/axios#request-config
    * @param concurrency the amount of concurrent requests to be handled by the built in queue. Default is 5.
@@ -2786,6 +2968,27 @@ public async getStatus(contactId: ContactId) {
     console.log('Invalid lisetner', event);
     return false;
   }
+
+  private async registerEv(simpleListener: SimpleListener) {
+    if(this[simpleListener]){
+      if(!this._registeredEvListeners) this._registeredEvListeners={};
+      if(this._registeredEvListeners[simpleListener]) {
+        console.log('Listener already registered');
+        return false;
+      }
+      const sessionId = this.getSessionId();
+      this._registeredEvListeners[simpleListener] = this[simpleListener](async data=>ev.emit(`${simpleListener}.${sessionId}`,{
+        ts: Date.now(),
+        sessionId,
+        event: simpleListener,
+        data
+      }));
+      return true;
+    }
+    console.log('Invalid lisetner', simpleListener);
+    return false;
+  }
+  
 }
 
 export { useragent } from '../config/puppeteer.config'

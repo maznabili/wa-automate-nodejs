@@ -2,6 +2,7 @@
 /** @ignore */
 const fs = require('fs'),
 boxen = require('boxen'),
+osName = require('os-name'),
 configWithCases = require('../../bin/config-schema.json'),
 updateNotifier = require('update-notifier'),
 pkg = require('../../package.json'),
@@ -20,13 +21,17 @@ import CFonts from 'cfonts';
 import { popup } from './popup';
 import { getConfigFromProcessEnv } from '../utils/tools';
 import { SessionInfo } from '../api/model/sessionInfo';
+import { Page } from 'puppeteer';
 /** @ignore */
 // let shouldLoop = true,
 let axios;
+export let screenshot;
+
 
 /**
- * Should be called to initialize whatsapp client.
- * *Note* You can send all params as a single object with the new [ConfigObject](https://open-wa.github.io/wa-automate-nodejs/interfaces/configobject.html) that includes both [sessionId](https://open-wa.github.io/wa-automate-nodejs/interfaces/configobject.html#sessionId) and [customUseragent](ttps://open-wa.github.io/wa-automate-nodejs/interfaces/configobject.html#customUseragent).
+ * Used to initialize the client session.
+ * 
+ * *Note* It is required to set all config variables as [ConfigObject](https://open-wa.github.io/wa-automate-nodejs/interfaces/configobject.html) that includes both [sessionId](https://open-wa.github.io/wa-automate-nodejs/interfaces/configobject.html#sessionId). Setting the session id as the first variable is no longer valid
  * 
  * e.g
  * 
@@ -38,11 +43,8 @@ let axios;
  * ...
  * })....
  * ```
- * @param sessionId [string | ConfigObject ]Custom id for the session, every phone should have it's own sessionId. THIS CAN BE THE CONFIG OBJECT INSTEAD
- * @param config The extended custom configuration
- * @param customUserAgent A custom user agent to set on the browser page.
+ * @param config ConfigObject] The extended custom configuration
  */
-//export async function create(sessionId?: string, config?:ConfigObject, customUserAgent?:string) {
 //@ts-ignore
 export async function create(config: ConfigObject = {}): Promise<Client> {
   const START_TIME = Date.now();
@@ -116,8 +118,27 @@ export async function create(config: ConfigObject = {}): Promise<Client> {
 
     const PAGE_UA = await waPage.evaluate('navigator.userAgent');
     const BROWSER_VERSION = await waPage.browser().version();
+    const OS = osName();
+    const START_TS = Date.now();
+    const screenshotPath = `./logs/${config.sessionId || 'session'}/${START_TS}`
+    screenshot = async (page: Page) => {
+      await page.screenshot({
+        path:`${screenshotPath}/${Date.now()}.jpg`
+    }).catch(_=>{
+      fs.mkdirSync(screenshotPath, {recursive: true});
+      return screenshot(page)
+    });
+    console.log('Screenshot taken. path:', `${screenshotPath}`)
+    }
+    
+    if(config?.screenshotOnInitializationBrowserError) waPage.on('console', async msg => {
+      for (let i = 0; i < msg.args().length; ++i)
+        console.log(`${i}: ${msg.args()[i]}`);
+      if(msg.type() === 'error' && !msg.text().includes('apify') && !msg.text().includes('crashlogs')) await screenshot(waPage)
+    });
 
     const WA_AUTOMATE_VERSION = `${pkg.version}${notifier?.update ? ` UPDATE AVAILABLE: ${notifier?.update.latest}` : ''}`;
+    await waPage.waitForFunction('window.Debug!=undefined && window.Debug.VERSION!=undefined');
     //@ts-ignore
     const WA_VERSION = await waPage.evaluate(() => window.Debug ? window.Debug.VERSION : 'I think you have been TOS_BLOCKed')
     //@ts-ignore
@@ -126,7 +147,9 @@ export async function create(config: ConfigObject = {}): Promise<Client> {
       WA_VERSION,
       PAGE_UA,
       WA_AUTOMATE_VERSION,
-      BROWSER_VERSION
+      BROWSER_VERSION,
+      OS,
+      START_TS
     };
     console.table(debugInfo);
 
@@ -257,7 +280,10 @@ export async function create(config: ConfigObject = {}): Promise<Client> {
           const l_success = await waPage.evaluate(data => eval(data), data);
           if(!l_success) {
             l_err = await waPage.evaluate('window.launchError');
-          } else spinner.succeed('License Valid');
+          } else {
+            const keyType = await waPage.evaluate('window.KEYTYPE || false');
+            spinner.succeed(`License Valid${keyType?`: ${keyType}`:''}`);
+          }
         } else l_err = "The key is invalid"
         if(l_err) {
           spinner.fail(`License issue${l_err ? `: ${l_err}` : ""}`);

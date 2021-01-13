@@ -4,7 +4,7 @@
 
 ### Insiders Features
 
-open-wa is at the forefront of open source WA developmentand runs on donations from backers. To encourage donations, backers have access to exclusive features with an [Insiders Program license key](https://gumroad.com/l/BTMt).
+open-wa is at the forefront of open source WA developmentand runs on donations from backers. To encourage donations, backers have access to exclusive features with an [Insiders Program license key](https://gum.co/open-wa).
 
 
 | Function                          | Description |
@@ -39,7 +39,7 @@ There are 3 ways to start a chat with a new number:
       You can add this button to your website which, when clicked, will open a chat with you in the same way as above.
 3. [With a Restricted License Key](#how-to-get-a-license-key)
 
-     In order to unlock the functionality to send texts to unknown numbers through @open-wa/wa-automate itself, you will need a [Restricted License key](https://gumroad.com/l/BTMt?tier=1%20Restricted%20License%20Key).
+     In order to unlock the functionality to send texts to unknown numbers through @open-wa/wa-automate itself, you will need a [Restricted License key](https://gum.co/open-wa?tier=1%20Restricted%20License%20Key).
 
      One License Key is valid for one number. Each License Key for this is £10 per month. [Instructions below.](#how-to-get-a-license-key)
 
@@ -80,7 +80,7 @@ create({
 | Name | link | Description
 | --------------------------------- | ----------- |  ----------- |
 | Insiders | [LINK](https://gum.co/BTMt?tier=Insiders%20Program) | [All Insiders Features](https://open-wa.github.io/wa-automate-nodejs/pages/The%20Client/licensed-features.html#insiders-features)
-| Restricted | [LINK](https://gumroad.com/l/BTMt?tier=1%20Restricted%20License%20Key) | Send messages to non-contacts
+| Restricted | [LINK](https://gum.co/open-wa?tier=1%20Restricted%20License%20Key) | Send messages to non-contacts
 | Text Story | [LINK](https://gum.co/BTMt?tier=1%20Text%20Story%20License%20Key) | Send Text Stories
 | Image Story | [LINK](https://gum.co/BTMt?tier=1%20Image%20Story%20License%20Key) | Send Image Stories
 | Video Story | [LINK](https://gum.co/BTMt?tier=1%20Video%20Story%20License%20Key) | Send Video Stories
@@ -97,13 +97,13 @@ const hostAccountNumber = await client.getHostNumber();
 console.log('Host account', hostAccountNumber);
 ```
 
-If it's different from what you've entered in the checkout form, [please fill and send this email.](mailto:shah@idk.uno?subject=OPENWA%3A%20WRONG%20HOST%20ACC%20NUMBER&body=email%20used%20to%20buy%20key%3A%0D%0Alicense%20key%3A%0D%0Acorrect%20host%20account%20number%3A%0D%0A)
+If it's different from what you've entered in the checkout form, [please fill and send this email.](mailto:shah@openwa.dev?subject=OPENWA%3A%20WRONG%20HOST%20ACC%20NUMBER&body=email%20used%20to%20buy%20key%3A%0D%0Alicense%20key%3A%0D%0Acorrect%20host%20account%20number%3A%0D%0A)
 
 If you are having issues where your license key shows as valid in the console, but the features continually return `false` this may be due to a NodeJS issue relating to the time on your machine. To fix this, make sure your machine's time is correct.
 
 ## Switching your host account
 
-If your development and production host accounts are different, then you can enter the development host account number in the form and when you're ready to your production host account, [fill and send this email.](mailto:shah@idk.uno?subject=OPENWA%3A%PRODUCTION%20HOST%20ACC%20NUMBER&body=email%20used%20to%20buy%20key%3A%0D%0Alicense%20key%3A%0D%0Acorrect%20host%20account%20number%3A%0D%0A)
+If your development and production host accounts are different, then you can enter the development host account number in the form and when you're ready to your production host account, [fill and send this email.](mailto:shah@openwa.dev?subject=OPENWA%3A%PRODUCTION%20HOST%20ACC%20NUMBER&body=email%20used%20to%20buy%20key%3A%0D%0Alicense%20key%3A%0D%0Acorrect%20host%20account%20number%3A%0D%0A)
 
 ## Notes
 
@@ -116,6 +116,6 @@ If your development and production host accounts are different, then you can ent
 - License Key requests may be rejected.
 - All code you will receive from the license server is closed-sourced and is under the same license as this project. You will not be able to read it. It is not transferrable to another number or another project.
 - All keys provide access to Insiders Features.
-- No Refunds unless you have chosen the incorrect license upon checkout. Refund requests need to take place after the correct license is purchased. [Once the correct license is purchased please email me for a refund.](mailto:shah@idk.uno?subject=OPENWA%3A%LICENSE%3A%CORRECTION)
-- [Volume licenses are available upon request.](mailto:shah@idk.uno?subject=OPENWA%3A%VOLUME%%20LICENSE)
-- [Referral links are available upon request.](mailto:shah@idk.uno?subject=OPENWA%3A%Referral%%20Scheme)
+- No Refunds unless you have chosen the incorrect license upon checkout. Refund requests need to take place after the correct license is purchased. [Once the correct license is purchased please email me for a refund.](mailto:shah@openwa.dev?subject=OPENWA%3A%LICENSE%3A%CORRECTION)
+- [Volume licenses are available upon request.](mailto:shah@openwa.dev?subject=OPENWA%3A%VOLUME%%20LICENSE)
+- [Referral links are available upon request.](mailto:shah@openwa.dev?subject=OPENWA%3A%Referral%%20Scheme)

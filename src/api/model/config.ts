@@ -22,7 +22,7 @@ export enum QRFormat{
   }
   
   /**
-   * The set values of quality you can set for the qquality of the qr code output. Ten being the highest quality.
+   * The set values of quality you can set for the quality of the qr code output. Ten being the highest quality.
    */
   export enum QRQuality {
     ONE = 0.1,
@@ -57,7 +57,7 @@ export interface DevTools {
 
 export interface ProxyServerCredentials {
     /**
-     * The protocol on which the proxy is running. E.g http, https, socks4 or socks5. This is optional and can be automatically determined from the address.
+     * The protocol on which the proxy is running. E.g `http`, `https`, `socks4` or `socks5`. This is optional and can be automatically determined from the address.
      */
     protocol?: string;
     /**
@@ -331,6 +331,7 @@ export interface ConfigObject {
      * safeMode        ==>     WA_SAFE_MODE
      * skipSessionSave ==>     WA_SKIP_SESSION_SAVE
      * popup           ==>     WA_POPUP 
+     * licensekey      ==>     WA_LICENSE_KEY 
      * ```
      * @default `false`
      */
@@ -382,8 +383,8 @@ export interface ConfigObject {
      */
     legacy ?: boolean;
     /**
-     * Deletes the session data file (if found) on logout event. This results in a quickler login when you restart the process.
-     * @default `true`
+     * Deletes the session data file (if found) on logout event. This results in a quicker login when you restart the process.
+     * @default `false`
      */
     deleteSessionDataOnLogout ?: boolean;
     /**
@@ -395,7 +396,31 @@ export interface ConfigObject {
      * Setting this to true will bypass web security. DO NOT DO THIS IF YOU DO NOT HAVE TO. CORS issue may arise when using a proxy.
      * @default `false`
      */
-    corsFix ?: boolean
+    corsFix ?: boolean;
+    /**
+     * Amount of time (in ms) to wait for a client method (specifically methods that interact with the WA web session) to resolve. If a client method results takes longer than the timout value then it will result in a [[PageEvaluationTimeout]] error.
+     * 
+     * If you get this error, it does not automatically mean that the method failed - it just stops your program from waiting for a client method to resolve.
+     * 
+     * This is useful if you do not rely on the results of a client method (e.g the message ID).
+     * 
+     * If set to `0`, the process will wait indefinitely for a client method to resolve.
+     * @default 0
+     */
+    callTimeout ?: number;
+    /**
+     * When true, this option will take a screenshot of the browser when an unexpected error occurs within the browser during `create` initialization. The path will be `[working directory]/logs/[session ID]/[start timestamp]/[timestamp].jpg`
+     * @default `false`
+     */
+    screenshotOnInitializationBrowserError ?: boolean;
+    /**
+     * Setting listeners may not be your cup of tea. With eventMode, all [[SimpleListener]] events will be registered automatically and be filed via the built in Events Listener.
+     * 
+     * This is useful because you can register/deregister the event listener as needed whereas the legacy method of setting callbacks are only be set once
+     * 
+     * @default false;
+     */
+    eventMode ?: boolean;
     /**@internal */
     [x: string]: any 
 }
