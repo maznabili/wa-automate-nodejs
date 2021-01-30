@@ -217,7 +217,10 @@ export async function create(config: ConfigObject = {}): Promise<Client> {
       const localStorage = JSON.parse(await waPage.evaluate(() => {
         return JSON.stringify(window.localStorage);
       }));
-      const sessionjsonpath = (config?.sessionDataPath && config?.sessionDataPath.includes('.data.json')) ? path.join(path.resolve(process.cwd(),config?.sessionDataPath || '')) : path.join(path.resolve(process.cwd(),config?.sessionDataPath || ''), `${sessionId || 'session'}.data.json`);
+      const stdSessionJsonPath = (config?.sessionDataPath && config?.sessionDataPath.includes('.data.json')) ? path.join(path.resolve(process.cwd(),config?.sessionDataPath || '')) : path.join(path.resolve(process.cwd(),config?.sessionDataPath || ''), `${sessionId || 'session'}.data.json`);
+      const altMainModulePath = require?.main?.path || process?.mainModule?.path;
+      const altSessionJsonPath = !altMainModulePath ? null : (config?.sessionDataPath && config?.sessionDataPath.includes('.data.json')) ? path.join(path.resolve(altMainModulePath,config?.sessionDataPath || '')) : path.join(path.resolve(altMainModulePath,config?.sessionDataPath || ''), `${sessionId || 'session'}.data.json`);
+      const sessionjsonpath = altSessionJsonPath && fs.existsSync(altSessionJsonPath) ? altSessionJsonPath : stdSessionJsonPath;
       const sessionData = {
         WABrowserId: localStorage.WABrowserId,
         WASecretBundle: localStorage.WASecretBundle,
