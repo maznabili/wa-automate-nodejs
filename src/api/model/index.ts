@@ -104,3 +104,5 @@ export enum STATE {
 
 
 export * from './config'
+export * from './media'
+export * from './aliases'

@@ -1,5 +1,5 @@
 import { Page, EvaluateFn } from 'puppeteer';
-import { Chat, LiveLocationChangedEvent, ChatState } from './model/chat';
+import { Chat, LiveLocationChangedEvent, ChatState, ChatMuteDuration } from './model/chat';
 import { Contact } from './model/contact';
 import { Message } from './model/message';
 import axios from 'axios';
@@ -17,7 +17,17 @@ datauri = require('datauri'),
 fs = require('fs'),
 isUrl = require('is-url'),
 ffmpeg = require('fluent-ffmpeg'),
-isDataURL = (s: string) => !!s.match(/^data:((?:\w+\/(?:(?!;).)+)?)((?:;[\w\W]*?[^;])*),(.+)$/g);
+isDataURL = (s: string) => !!s.match(/^data:((?:\w+\/(?:(?!;).)+)?)((?:;[\w\W]*?[^;])*),(.+)$/g),
+isBase64 = (str: string) => {
+  const len = str.length;
+  if (!len || len % 4 !== 0 || /[^A-Z0-9+\/=]/i.test(str)) {
+    return false;
+  }
+  const firstPaddingChar = str.indexOf('=');
+  return firstPaddingChar === -1 ||
+    firstPaddingChar === len - 1 ||
+    (firstPaddingChar === len - 2 && str[len - 1] === '=');
+}
 import treekill from 'tree-kill';
 import { SessionInfo } from './model/sessionInfo';
 import { injectApi } from '../controllers/browser';
@@ -74,9 +84,9 @@ export enum SimpleListener {
    */
   IncomingCall = 'onIncomingCall',
   /**
-   * Represents [[onGlobalParicipantsChanged]]
+   * Represents [[onGlobalParticipantsChanged]]
    */
-  GlobalParicipantsChanged = 'onGlobalParicipantsChanged',
+  GlobalParticipantsChanged = 'onGlobalParticipantsChanged',
   /**
    * Represents [[onChatState]]
    */
@@ -202,7 +212,7 @@ declare module WAPI {
   const onAddedToGroup: (callback: Function) => any;
   const onBattery: (callback: Function) => any;
   const onPlugged: (callback: Function) => any;
-  const onGlobalParicipantsChanged: (callback: Function) => any;
+  const onGlobalParticipantsChanged: (callback: Function) => any;
   const onStory: (callback: Function) => any;
   const setChatBackgroundColourHex: (hex: string) => boolean;
   const darkMode: (activate: boolean) => boolean;
@@ -335,6 +345,8 @@ declare module WAPI {
   const getGroupParticipantIDs: (groupId: string) => Promise<string[]>;
   const getGroupInfo: (groupId: string) => Promise<any>;
   const joinGroupViaLink: (link: string) => Promise<string | boolean | number>;
+  const muteChat: (chatId: ChatId, muteDuration: ChatMuteDuration) => Promise<string | boolean | number>;
+  const unmuteChat: (chatId: ChatId) => Promise<string | boolean | number>;
   const leaveGroup: (groupId: string) => any;
   const getVCards: (msgId: string) => any;
   const getContact: (contactId: string) => Contact;
@@ -342,6 +354,7 @@ declare module WAPI {
   const getChatById: (contactId: string) => Chat;
   const smartDeleteMessages: (contactId: string, messageId: string[] | string, onlyLocal:boolean) => any;
   const sendContact: (to: string, contact: string | string[]) => any;
+  const sendMultipleContacts: (chatId: ChatId, contacts: ContactId[]) => any;
   const simulateTyping: (to: string, on: boolean) => Promise<boolean>;
   const archiveChat: (id: string, archive: boolean) => Promise<boolean>;
   const isConnected: () => Boolean;
@@ -386,14 +399,24 @@ export class Client {
     this._sessionInfo = sessionInfo;
     this._listeners = {};
     if(this._createConfig.stickerServerEndpoint!== false) this._createConfig.stickerServerEndpoint = true;
-    if(this._createConfig?.eventMode) {
-      this.registerAllSimpleListenersOnEv();
-    }
     this._setOnClose();
   }
 
-  private registerAllSimpleListenersOnEv(){
-    Object.keys(SimpleListener).map(eventKey => this.registerEv(SimpleListener[eventKey]))
+  /**
+   * @private
+   * 
+   * DO NOT USE THIS.
+   * 
+   * Run all tasks to set up client AFTER init is fully completed
+   */
+  async loaded() {
+    if(this._createConfig?.eventMode) {
+      await this.registerAllSimpleListenersOnEv();
+    }
+  }
+
+  private async registerAllSimpleListenersOnEv(){
+      await Promise.all(Object.keys(SimpleListener).map(eventKey => this.registerEv(SimpleListener[eventKey])))
   }
 
   getSessionId(){
@@ -508,7 +531,7 @@ export class Client {
       return window[funcName] ? WAPI[`${funcName}`](obj => window[funcName](obj)) : false
     },{funcName});
     if(this._listeners[funcName]) {
-      console.log('listener already set');
+      // console.log('listener already set');
       return true
     }
     this._listeners[funcName] = fn;
@@ -670,8 +693,8 @@ export class Client {
    * @param fn callback function that handles a [[ParticipantChangedEventModel]] as the first and only parameter.
    * @returns `true` if the callback was registered
    */
-  public async onGlobalParicipantsChanged(fn: (participantChangedEvent: ParticipantChangedEventModel) => void) {
-    return this.registerListener(SimpleListener.GlobalParicipantsChanged, fn);
+  public async onGlobalParticipantsChanged(fn: (participantChangedEvent: ParticipantChangedEventModel) => void) {
+    return this.registerListener(SimpleListener.GlobalParticipantsChanged, fn);
   }
 
   /**
@@ -954,7 +977,10 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
       },
       { to, content }
     );
-    if(err.includes(res)) console.error(res);
+    if(err.includes(res)) {
+      if(res==err[1]) console.error(`\n${res}. Requires license: https://get.openwa.dev/l/${await this.getHostNumber()}\n`)
+      else console.error(res);
+    }
     return (err.includes(res) ? false : res)  as boolean | MessageId;
   }
   
@@ -1488,7 +1514,7 @@ public async iAmAdmin(){
    }
 
   /**
-   * Sends contact card to given chat id
+   * Sends contact card to given chat id. You can use this to send multiple contacts but they will show up as multiple single-contact messages.
    * @param {string} to 'xxxx@c.us'
    * @param {string|array} contact 'xxxx@c.us' | ['xxxx@c.us', 'yyyy@c.us', ...]
    */
@@ -1496,6 +1522,22 @@ public async iAmAdmin(){
     return await this.pup(
       ({ to, contactId }) => WAPI.sendContact(to, contactId),
       { to, contactId }
+    );
+  }
+
+  /**
+   * 
+   * [REQUIRES AN INSIDERS LICENSE-KEY](https://gum.co/open-wa?tier=Insiders%20Program)
+   * 
+   * Sends multiple contacts as a single message
+   * 
+   * @param  to 'xxxx@c.us'
+   * @param contact ['xxxx@c.us', 'yyyy@c.us', ...]
+   */
+  public async sendMultipleContacts(to: ChatId, contactIds: ContactId[]) {
+    return await this.pup(
+      ({ to, contactIds }) => WAPI.sendMultipleContacts(to, contactIds),
+      { to, contactIds }
     );
   }
 
@@ -1525,6 +1567,38 @@ public async iAmAdmin(){
     ) as Promise<boolean>;
   }
 
+
+  /**
+   * 
+   * [REQUIRES AN INSIDERS LICENSE-KEY](https://gum.co/open-wa?tier=Insiders%20Program)
+   * 
+   * Mutes a conversation for a given duration. If already muted, this will update the muted duration. Mute durations are relative from when the method is called.
+   * @param id The id of the conversation you want to mute
+   * @param muteDuration ChatMuteDuration enum of the time you want this chat to be muted for.
+   * @return boolean true: worked or error code or message
+   */
+  public async muteChat(chatId: ChatId, muteDuration: ChatMuteDuration) {
+    return await this.pup(
+      ({ chatId, muteDuration }) => WAPI.muteChat(chatId, muteDuration),
+      { chatId, muteDuration }
+    ) as Promise<boolean | string | number>;
+  }
+
+
+  /**
+   * 
+   * [REQUIRES AN INSIDERS LICENSE-KEY](https://gum.co/open-wa?tier=Insiders%20Program)
+   * 
+   * Unmutes a conversation.
+   * @param id The id of the conversation you want to mute
+   * @return boolean true: worked or error code or message
+   */
+  public async unmuteChat(chatId: ChatId) {
+    return await this.pup(
+      ({ chatId }) => WAPI.unmuteChat(chatId),
+      { chatId }
+    ) as Promise<boolean | string | number>;
+  }
 
   /**
    * Forward an array of messages to a specific chat using the message ids or Objects
@@ -1665,7 +1739,7 @@ public async iAmAdmin(){
     return await this.pup(
       groupId => WAPI.getGroupParticipantIDs(groupId),
       groupId
-    ) as Promise<string[]>;
+    ) as Promise<ContactId[]>;
   }
 
   /**
@@ -2067,15 +2141,15 @@ public async getStatus(contactId: ContactId) {
 
   /**
    * Deletes message of given message id
-   * @param contactId The chat id from which to delete the message.
+   * @param chatId The chat id from which to delete the message.
    * @param messageId The specific message id of the message to be deleted
    * @param onlyLocal If it should only delete locally (message remains on the other recipienct's phone). Defaults to false.
    * @returns nothing
    */
-  public async deleteMessage(contactId: ContactId, messageId: MessageId[] | MessageId, onlyLocal : boolean = false) {
+  public async deleteMessage(chatId: ChatId, messageId: MessageId[] | MessageId, onlyLocal : boolean = false) {
     return await this.pup(
-      ({ contactId, messageId, onlyLocal }) => WAPI.smartDeleteMessages(contactId, messageId, onlyLocal),
-      { contactId, messageId, onlyLocal }
+      ({ chatId, messageId, onlyLocal }) => WAPI.smartDeleteMessages(chatId, messageId, onlyLocal),
+      { chatId, messageId, onlyLocal }
     );
   }
 
@@ -2511,20 +2585,44 @@ public async getStatus(contactId: ContactId) {
 
   private async stickerServerRequest(func: string, a : any = {}){
     if(!this._createConfig.stickerServerEndpoint) return false;
-    try {
-      const {data} = await axios.post(`${'https://sticker-api.openwa.dev' || this._createConfig.stickerServerEndpoint}/${func}`, {
-        ...a,
-      sessionInfo: this.getSessionInfo(),
-      config: this.getConfig()
-    });
-      return data;
-    } catch (err) {
-      console.error(err.message);
+    if(a.file || a.image) {
+      //check if its a local file:
+      const key = a.file ? 'file' : 'image';
+      if(!isDataURL(a[key]) && !isUrl(a[key]) && !isBase64(a[key])){
+        const relativePath = path.join(path.resolve(process.cwd(),a[key]|| ''));
+        if(fs.existsSync(a[key]) || fs.existsSync(relativePath)) {
+          a[key] = await datauri(fs.existsSync(a[key])  ? a[key] : relativePath);
+        } else {
+          console.error('FILE_NOT_FOUND')
+          return false
+        }
+      }
+      if(a?.stickerMetadata && typeof a?.stickerMetadata !== "object") throw new Error(`Expected stickerMetadata object. Received ${typeof a?.stickerMetadata}: ${a?.stickerMetadata}`);
+      try {
+        const {data} = await axios.post(`${'https://open-wa-sticker-api.herokuapp.com' || this._createConfig.stickerServerEndpoint}/${func}`, {
+          ...a,
+        sessionInfo: this.getSessionInfo(),
+        config: this.getConfig()
+      },{
+        maxBodyLength: 20000000
+      });
+        return data;
+      } catch (err) {
+        console.error(err?.response?.status, err?.response?.data);
+        return false;
+      }
+    } else {
+      console.error("Media is missing from this request");
       return false;
     }
   }
 
   private async prepareWebp(image: DataURL, stickerMetadata?: StickerMetadata) {
+    // console.log("prepareWebp", image.slice(0,25))
+    if(isDataURL(image) && !image.includes("image")) {
+      console.error("Not an image. Please use convertMp4BufferToWebpDataUrl to process video stickers");
+      return false
+    }
     if(this._createConfig.stickerServerEndpoint) {
       return await this.stickerServerRequest('prepareWebp', {
         image,
@@ -2533,10 +2631,10 @@ public async getStatus(contactId: ContactId) {
     }
     const buff = Buffer.from(image.replace(/^data:image\/(png|gif|jpeg|webp);base64,/,''), 'base64');
     const mimeInfo = base64MimeType(image);
-    if(!mimeInfo || mimeInfo.includes("image")){
+    if(mimeInfo?.includes("image")){
       let webpBase64 = image;
       let metadata : any = { width: 512, height: 512 };
-      if(!mimeInfo.includes('webp')) {
+      if(!mimeInfo?.includes('webp')) {
         const { pages } = await sharp(buff).metadata();
       //@ts-ignore
       let webp = sharp(buff,{ failOnError: false, animated: !!pages}).webp();
@@ -2582,11 +2680,11 @@ public async getStatus(contactId: ContactId) {
    */
   public async sendMp4AsSticker(to: ChatId, file: DataURL | Buffer | Base64 | string, processOptions: Mp4StickerConversionProcessOptions = defaultProcessOptions, stickerMetadata?: StickerMetadata) {
     //@ts-ignore
-    if((typeof file === 'object' || file?.type === 'Buffer') && file.toString) {
+    if((Buffer.isBuffer(file)  || typeof file === 'object' || file?.type === 'Buffer') && file.toString) {
       file = file.toString('base64')
     }
       if(typeof file === 'string') {
-      if(!isDataURL(file)) {
+      if(!isDataURL(file) && !isBase64(file)) {
         //must be a file then
         if(isUrl(file)){
           file = await getDUrl(file)
@@ -2594,7 +2692,7 @@ public async getStatus(contactId: ContactId) {
           let relativePath = path.join(path.resolve(process.cwd(),file|| ''));
           if(fs.existsSync(file) || fs.existsSync(relativePath)) {
             file = await datauri(fs.existsSync(file)  ? file : relativePath);
-          } 
+          } else return 'FILE_NOT_FOUND';
         } 
       }
       } 
@@ -2607,6 +2705,7 @@ public async getStatus(contactId: ContactId) {
         })
       } else convertedStickerDataUrl = await convertMp4BufferToWebpDataUrl(file, processOptions);
     try {
+      if(!convertedStickerDataUrl) return false;
       return await this.sendRawWebpAsSticker(to, convertedStickerDataUrl, true);
     } catch (error) {
       console.log('Stickers have to be less than 1MB. Please lower the fps or shorten the duration using the processOptions parameter: https://open-wa.github.io/wa-automate-nodejs/classes/client.html#sendmp4assticker')
@@ -2983,7 +3082,7 @@ public async getStatus(contactId: ContactId) {
         return false;
       }
       const sessionId = this.getSessionId();
-      this._registeredEvListeners[simpleListener] = this[simpleListener](async data=>ev.emit(`${simpleListener}.${sessionId}`,{
+      this._registeredEvListeners[simpleListener] = await this[simpleListener](data=>ev.emit(`${simpleListener}.${sessionId}`,{
         ts: Date.now(),
         sessionId,
         event: simpleListener,

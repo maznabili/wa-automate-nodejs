@@ -1,10 +1,10 @@
-import { ChatId } from "./aliases";
+import { ChatId, ContactId, MessageId } from "./aliases";
 
 export interface Message {
   /**
    * The id of the message
    */
-  id: string;
+  id: MessageId;
   /**
    * The body of the message. If the message type is `chat` , `body` will be the text of the chat. If the message type is some sort of media, then this body will be the thumbnail of the media.
    */
@@ -79,7 +79,7 @@ export interface Message {
    * The contact object of the account that sent the message
    */
   sender: {
-    id: string;
+    id: ContactId;
     name: string;
     shortName: string;
     pushname: string;
@@ -123,7 +123,7 @@ export interface Message {
    * The chat object
    */
   chat: {
-    id: string;
+    id: ChatId;
     pendingMsgs: boolean;
     lastReceivedKey: {
       fromMe: boolean;
@@ -144,7 +144,7 @@ export interface Message {
     kind: string;
     isGroup: boolean;
     contact: {
-      id: string;
+      id: ContactId;
       name: string;
       shortName: string;
       pushname: string;
@@ -166,13 +166,18 @@ export interface Message {
     groupMetadata: any;
     presence: { id: string; chatstates: any[] };
   };
-  chatId: string;
+  chatId: ChatId;
   author: string;
+  /**
+   * @deprecated
+   */
   clientUrl: string;
+  deprecatedMms3Url: string;
   quotedMsg: any;
   quotedMsgObj: any;
   mediaData: {};
   shareDuration: number;
+  isAnimated: boolean;
 }
 
 
