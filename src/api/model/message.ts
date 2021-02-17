@@ -1,4 +1,7 @@
 import { ChatId, ContactId, MessageId } from "./aliases";
+import { Chat } from "./chat";
+import { Contact } from "./contact";
+import { GroupMetadata } from "./group-metadata";
 
 export interface Message {
   /**
@@ -66,7 +69,7 @@ export interface Message {
   /**
    * The labels associated with the message (used with business accounts)
    */
-  labels: any[];
+  labels: string[];
   /**
    * An array of all mentioned numbers in this message.
    */
@@ -78,33 +81,7 @@ export interface Message {
   /**
    * The contact object of the account that sent the message
    */
-  sender: {
-    id: ContactId;
-    name: string;
-    shortName: string;
-    pushname: string;
-    type: string;
-    plaintextDisabled: boolean;
-    isBusiness: boolean;
-    isEnterprise: boolean;
-    statusMute: boolean;
-    labels: any[];
-    formattedName: string;
-    isMe: boolean;
-    isMyContact: boolean;
-    isPSA: boolean;
-    isUser: boolean;
-    isWAContact: boolean;
-    profilePicThumbObj: {
-      eurl: string;
-      id: string;
-      img: string;
-      imgFull: string;
-      raw: any;
-      tag: string;
-    };
-    msgs: any;
-  };
+  sender: Contact;
   /**
    * the timestanmp of the message
    */
@@ -127,9 +104,9 @@ export interface Message {
     pendingMsgs: boolean;
     lastReceivedKey: {
       fromMe: boolean;
-      remote: string;
-      id: string;
-      _serialized: string;
+      remote: ChatId;
+      id: MessageId;
+      _serialized: MessageId;
     };
     t: number;
     unreadCount: number;
@@ -140,31 +117,12 @@ export interface Message {
     name: string;
     notSpam: boolean;
     pin: number;
-    msgs: any;
+    msgs: Message[];
     kind: string;
     isGroup: boolean;
-    contact: {
-      id: ContactId;
-      name: string;
-      shortName: string;
-      pushname: string;
-      type: string;
-      plaintextDisabled: boolean;
-      isBusiness: boolean;
-      isEnterprise: boolean;
-      statusMute: boolean;
-      labels: any[];
-      formattedName: string;
-      isMe: boolean;
-      isMyContact: boolean;
-      isPSA: boolean;
-      isUser: boolean;
-      isWAContact: boolean;
-      profilePicThumbObj: any[];
-      msgs: any;
-    };
-    groupMetadata: any;
-    presence: { id: string; chatstates: any[] };
+    contact: Chat;
+    groupMetadata: GroupMetadata;
+    presence: { id: ContactId; chatstates: any[] };
   };
   chatId: ChatId;
   author: string;
@@ -173,8 +131,8 @@ export interface Message {
    */
   clientUrl: string;
   deprecatedMms3Url: string;
-  quotedMsg: any;
-  quotedMsgObj: any;
+  quotedMsg: Message;
+  quotedMsgObj: Message;
   mediaData: {};
   shareDuration: number;
   isAnimated: boolean;

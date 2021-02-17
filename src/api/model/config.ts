@@ -427,6 +427,20 @@ export interface ConfigObject {
      */
     eventMode ?: boolean;
     /**
+     * If true, the system will automatically create a log of all processes relating to actions sent to the web session.
+     * 
+     * The location of the file will be relative to the process directory (pd)
+     * 
+     * `[pd]/[sessionId]/[start timestamp].log`
+     * @default false
+     */
+    logFile ?: boolean;
+    /**
+     * When true, the system will attempt to correct chatIds and groupChatIds. This means you can ignore `@c.us` and `@g.us` distinctions in some parameters.
+     * @default false
+     */
+    idCorrection ?: boolean;
+    /**
      * From v4, sharp and ffmpeg will be unbundled from the library in exchange for a sticker API. You should be able to host this API yourself that can serves multiple sessions/processes.
      * 
      * Until v4 is released, this is hardcoded to `https://open-wa-sticker-api.herokuapp.com` and any and all sticker API requests will be going to this API untill further notice.

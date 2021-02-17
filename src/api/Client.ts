@@ -5,7 +5,6 @@ import { Message } from './model/message';
 import axios from 'axios';
 import { ParticipantChangedEventModel } from './model/group-metadata';
 import { useragent, puppeteerConfig } from '../config/puppeteer.config'
-import sharp from 'sharp';
 import { ConfigObject, STATE } from './model';
 import { PageEvaluationTimeout } from './model/errors';
 import PQueue from 'p-queue';
@@ -13,10 +12,11 @@ import { ev } from '../controllers/events';
 /** @ignore */
 const parseFunction = require('parse-function'),
 pkg = require('../../package.json'),
+optionalRequire = require("optional-require")(require),
 datauri = require('datauri'),
 fs = require('fs'),
 isUrl = require('is-url'),
-ffmpeg = require('fluent-ffmpeg'),
+pino = require('pino'),
 isDataURL = (s: string) => !!s.match(/^data:((?:\w+\/(?:(?!;).)+)?)((?:;[\w\W]*?[^;])*),(.+)$/g),
 isBase64 = (str: string) => {
   const len = str.length;
@@ -27,6 +27,25 @@ isBase64 = (str: string) => {
   return firstPaddingChar === -1 ||
     firstPaddingChar === len - 1 ||
     (firstPaddingChar === len - 2 && str[len - 1] === '=');
+},
+createLogger = (sessionId: string, sessionInfo: SessionInfo, config: ConfigObject) => {
+  let p = path.join(path.resolve(process.cwd()),`/logs/${sessionId || 'session'}/${sessionInfo.START_TS}.log`)
+  if(!fs.existsSync(p)) {
+    fs.mkdirSync(path.join(path.resolve(process.cwd()),`/logs/${sessionId || 'session'}`), {
+      recursive:true
+    })
+  }
+  let logger = pino({
+  redact: ['file', 'base64', 'image', 'webpBase64', 'base64', 'durl'],
+  },pino.destination(p))
+
+  logger.child({
+    "STAGE": "LAUNCH",
+    sessionInfo,
+    config
+    }).info()
+
+  return logger
 }
 import treekill from 'tree-kill';
 import { SessionInfo } from './model/sessionInfo';
@@ -128,6 +147,8 @@ async function convertMp4BufferToWebpDataUrl(file: DataURL | Buffer | Base64, pr
     ...defaultProcessOptions,
     ...processOptions
   } : defaultProcessOptions
+  const ffmpeg = optionalRequire('fluent-ffmpeg', "Missing peer dependency: npm i fluent-ffmpeg");
+  if(!ffmpeg) return false;
   const tempFile = path.join(tmpdir(), `processing.${Crypto.randomBytes(6).readUIntLE(0, 6).toString(36)}.webp`);
   var stream = new (require('stream').Readable)();
   stream.push(Buffer.isBuffer(file) ? file : Buffer.from(file.replace('data:video/mp4;base64,',''), 'base64'));
@@ -387,6 +408,7 @@ export class Client {
   private _listeners: any;
   private _page: Page;
   private _currentlyBeingKilled: boolean = false;
+  private _l: any;
 
   /**
    * @ignore
@@ -413,6 +435,10 @@ export class Client {
     if(this._createConfig?.eventMode) {
       await this.registerAllSimpleListenersOnEv();
     }
+    this._sessionInfo.PHONE_VERSION = (await this.getMe()).phone.wa_version
+    this.logger().child({
+      PHONE_VERSION: this._sessionInfo.PHONE_VERSION
+    }).info()
   }
 
   private async registerAllSimpleListenersOnEv(){
@@ -451,6 +477,15 @@ export class Client {
   public async download(url: string, optionsOverride: any = {} ) {
     return await getDUrl(url, optionsOverride)
   } 
+
+
+  /**
+   * Grab the logger for this session/process
+   */
+  public logger(){
+    if(!this._l) this._l = createLogger(this.getSessionId(), this.getSessionInfo(), this.getConfig());
+    return this._l;
+  }
 
   /**
    * Refreshes the page and reinjects all necessary files. This may be useful for when trying to save memory
@@ -502,12 +537,31 @@ export class Client {
 
 
   private async pup(pageFunction:EvaluateFn<any>, ...args) {
-    if(this._createConfig?.safeMode) {
+    const {safeMode, callTimeout, idChecking, logFile} = this._createConfig;
+    if(safeMode) {
       if(!this._page || this._page.isClosed()) throw 'page closed';
       const state = await this.forceUpdateConnectionState();
       if(state!==STATE.CONNECTED) throw `state: ${state}`
     }
-    if(this._createConfig?.callTimeout) return await Promise.race([this._page.evaluate(pageFunction, ...args),new Promise((resolve, reject) => setTimeout(reject, this._createConfig?.callTimeout, new PageEvaluationTimeout()))])
+    if(idChecking) {
+      Object.entries(args[0]).map(([k,v] : [string,any]) => {
+        if(["to","chatId", "groupChatId", "groupId", "contactId"].includes(k) && typeof v == "string" && v) {
+        args[0][k] = v?.includes('-') ? 
+                          //it is a group chat, make sure it has a @g.us at the end
+                          `${v?.replace(/@(c|g).us/g,'')}@g.us` :
+                          //it is a normal chat, make sure it has a @c.us at the end
+                           `${v?.replace(/@(c|g).us/g,'')}@c.us`;
+        }
+      })
+    }
+    if(logFile) {
+      let wapis = (pageFunction?.toString()?.match(/WAPI\.(\w*)\(/g) || [])?.map(s=>s.replace(/WAPI|\.|\(/g,''));
+        this.logger().child({
+                        _method: wapis?.length === 1 ? wapis[0] : wapis,
+                        ...args[0]
+                        }).info()
+    }
+    if(callTimeout) return await Promise.race([this._page.evaluate(pageFunction, ...args),new Promise((resolve, reject) => setTimeout(reject, this._createConfig?.callTimeout, new PageEvaluationTimeout()))])
     return this._page.evaluate(pageFunction, ...args);
   }
 
@@ -712,7 +766,7 @@ export class Client {
   /**
    * [REQUIRES AN INSIDERS LICENSE-KEY](https://gum.co/open-wa?tier=Insiders%20Program)
    * 
-   * Fires callback with Chat object every time the host phone is added to a group.
+   * Fires callback with Chat object every time the host phone is removed to a group.
    * 
    * @event 
    * @param fn callback function that handles a [[Chat]] (group chat) as the first and only parameter.
@@ -882,11 +936,10 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
   }
     
   /**
-   * Returns the connecction state
-   * @returns Any of OPENING, PAIRING, UNPAIRED, UNPAIRED_IDLE, CONNECTED, TIMEOUT, CONFLICT, UNLAUNCHED, PROXYBLOCK, TOS_BLOCK, SMB_TOS_BLOCK, DEPRECATED_VERSION
+   * Returns the connection state
    */
   public async getConnectionState() {
-    return await this._page.evaluate(() => WAPI.getState());
+    return await this._page.evaluate(() => WAPI.getState()) as STATE;
   }
 
   /**
@@ -978,7 +1031,7 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
       { to, content }
     );
     if(err.includes(res)) {
-      if(res==err[1]) console.error(`\n${res}. Requires license: https://get.openwa.dev/l/${await this.getHostNumber()}\n`)
+      if(res==err[1]) console.error(`\n${res}. Unlock this feature and support open-wa by getting a license: https://get.openwa.dev/l/${await this.getHostNumber()}\n`)
       else console.error(res);
     }
     return (err.includes(res) ? false : res)  as boolean | MessageId;
@@ -1129,7 +1182,10 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
     if(!m.mimetype) throw new Error("Not a media message");
     if(m.type == "sticker") m = await this.getStickerDecryptable(m.id);
     //Dont have an insiders license to decrypt stickers
-    if(m===false) return false;
+    if(m===false) {
+      console.error(`\nUnable to decrypt sticker. Unlock this feature and support open-wa by getting a license: https://get.openwa.dev/l/${await this.getHostNumber()}?v=i\n`)
+      throw new Error('Sticker not decrypted')
+    }
     const mediaData = await decryptMedia(m);
     return `data:${m.mimetype};base64,${mediaData.toString('base64')}`
   };
@@ -1449,7 +1505,7 @@ public async iAmAdmin(){
   }
 
    /**
-    * SEasily get the amount of messages loaded up in the session. This will allow you to determine when to clear chats/cache.
+    * Easily get the amount of messages loaded up in the session. This will allow you to determine when to clear chats/cache.
     */
    public async getAmountOfLoadedMessages(){
      return await this.pup(() => WAPI.getAmountOfLoadedMessages()) as Promise<number>;
@@ -2244,7 +2300,8 @@ public async getStatus(contactId: ContactId) {
   }
 
   /**
-   * Sends a text message to given chat
+   * Create a group and add contacts to it
+   * 
    * @param to group name: 'New group'
    * @param contacts: A single contact id or an array of contact ids.
    * @returns Promise<GroupCreationResponse> :
@@ -2305,6 +2362,8 @@ public async getStatus(contactId: ContactId) {
           image
         })
       } else {
+        const sharp = optionalRequire('sharp',  "Missing peer dependency: npm i sharp");
+        if(!sharp) return false;
         //no matter what, convert to jpeg, resize + autoscale to width 48 px
         const scaledImageBuffer = await sharp(buff,{ failOnError: false })
         .resize({ height: 300 })
@@ -2629,6 +2688,8 @@ public async getStatus(contactId: ContactId) {
         stickerMetadata
       })
     }
+    const sharp = optionalRequire('sharp',  "Missing peer dependency: npm i sharp");
+    if(!sharp) return false;
     const buff = Buffer.from(image.replace(/^data:image\/(png|gif|jpeg|webp);base64,/,''), 'base64');
     const mimeInfo = base64MimeType(image);
     if(mimeInfo?.includes("image")){
