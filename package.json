@@ -1,6 +1,6 @@
 {
   "name": "@open-wa/wa-automate",
-  "version": "3.5.0",
+  "version": "3.6.1",
   "licenseCheckUrl": "https://openwa.dev/license-check",
   "brokenMethodReportUrl": "https://openwa.dev/report-bm",
   "patches": "https://raw.githack.com/open-wa/wa-automate-nodejs/master/patches.json",
@@ -25,7 +25,8 @@
     "release-ci": "release-it --ci",
     "release-image": "node release-image.js",
     "docwatch": "onchange 'src/**/*.ts'  'docs-source/**/*.md' -- typedoc",
-    "build:config-for-bin": "cd build && ts-node build-config-json-for-bin.ts && cd .."
+    "build:config-for-bin": "cd build && ts-node build-config-json-for-bin.ts && cd ..",
+    "postinstall": "patch-package"
   },
   "husky": {
     "hooks": {
@@ -103,6 +104,7 @@
     "death": "^1.1.0",
     "eventemitter2": "^6.0.0",
     "express": "^4.17.1",
+    "express-robots-txt": "^0.5.0",
     "get-port": "^5.1.1",
     "hasha": "^5.2.0",
     "image-type": "^4.1.0",
@@ -116,6 +118,7 @@
     "p-queue": "^6.4.0",
     "parse-function": "^5.6.10",
     "parse-url": "^5.0.2",
+    "patch-package": "^6.2.2",
     "pino": "^6.11.1",
     "postman-2-swagger": "^0.5.0",
     "puppeteer": "7.0.0",
@@ -128,12 +131,13 @@
     "rxjs": "^6.5.3",
     "socket.io": "^3.0.0",
     "spinnies": "^0.5.1",
+    "swagger-stats": "^0.95.18",
     "swagger-ui-dist": "^3.36.1",
     "swagger-ui-express": "^4.1.4",
     "tcp-port-used": "^1.0.1",
     "terminal-link": "^2.1.1",
     "tree-kill": "^1.2.2",
-    "ts-json-schema-generator": "^0.84.0",
+    "ts-json-schema-generator": "^0.86.1",
     "ts-morph": "^9.1.0",
     "typescript-parser": "^2.6.1",
     "update-notifier": "^5.0.0",
