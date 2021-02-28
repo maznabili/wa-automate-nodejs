@@ -2,11 +2,11 @@ import { Page, EvaluateFn } from 'puppeteer';
 import { Chat, LiveLocationChangedEvent, ChatState, ChatMuteDuration } from './model/chat';
 import { Contact } from './model/contact';
 import { Message } from './model/message';
-import axios from 'axios';
+import { default as axios, AxiosRequestConfig} from 'axios';
 import { ParticipantChangedEventModel } from './model/group-metadata';
 import { useragent, puppeteerConfig } from '../config/puppeteer.config'
 import { ConfigObject, STATE } from './model';
-import { PageEvaluationTimeout } from './model/errors';
+import { PageEvaluationTimeout, CustomError, ERROR_NAME  } from './model/errors';
 import PQueue from 'p-queue';
 import { ev } from '../controllers/events';
 /** @ignore */
@@ -244,8 +244,8 @@ declare module WAPI {
   const sendMessage: (to: string, content: string) => Promise<string>;
   const setChatEphemeral: (chatId: string, ephemeral: boolean) => Promise<boolean>;
   const downloadFileWithCredentials: (url: string) => Promise<string>;
-  const sendMessageWithMentions: (to: string, content: string) => Promise<string>;
-  const tagEveryone: (groupId: string, content: string) => Promise<string>;
+  const sendMessageWithMentions: (to: string, content: string, hideTags: boolean) => Promise<string>;
+  const tagEveryone: (groupId: string, content: string, hideTags: boolean) => Promise<string>;
   const sendReplyWithMentions: (to: string, content: string, replyMessageId: string) => Promise<string>;
   const postTextStatus: (text: string, textRgba: string, backgroundRgba: string, font: string) => Promise<string | boolean>;
   const postImageStatus: (data: string, caption: string) => Promise<string | boolean>;
@@ -292,6 +292,7 @@ declare module WAPI {
   const REPORTSPAM: (id: string) => Promise<boolean>;
   const contactUnblock: (id: string) => Promise<boolean>;
   const deleteConversation: (chatId: string) => Promise<boolean>;
+  const isChatMuted: (chatId: string) => Promise<boolean>;
   const clearChat: (chatId: string) => Promise<any>;
   const inviteInfo: (link: string) => Promise<any>;
   const ghostForward: (chatId: string, messageId: string) => Promise<boolean>;
@@ -539,9 +540,9 @@ export class Client {
   private async pup(pageFunction:EvaluateFn<any>, ...args) {
     const {safeMode, callTimeout, idChecking, logFile} = this._createConfig;
     if(safeMode) {
-      if(!this._page || this._page.isClosed()) throw 'page closed';
+      if(!this._page || this._page.isClosed()) throw new CustomError(ERROR_NAME.PAGE_CLOSED, 'page closed');
       const state = await this.forceUpdateConnectionState();
-      if(state!==STATE.CONNECTED) throw `state: ${state}`
+      if(state!==STATE.CONNECTED) throw new CustomError(ERROR_NAME.STATE_ERROR,`state: ${state}`);
     }
     if(idChecking) {
       Object.entries(args[0]).map(([k,v] : [string,any]) => {
@@ -550,7 +551,7 @@ export class Client {
                           //it is a group chat, make sure it has a @g.us at the end
                           `${v?.replace(/@(c|g).us/g,'')}@g.us` :
                           //it is a normal chat, make sure it has a @c.us at the end
-                           `${v?.replace(/@(c|g).us/g,'')}@c.us`;
+                          `${v?.replace(/@(c|g).us/g,'')}@c.us`;
         }
       })
     }
@@ -1012,10 +1013,11 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
   /**
    * Sends a text message to given chat
    * If you need to send a message to new numbers please see [these instructions:](https://docs.openwa.dev/pages/The%20Client/licensed-features.html#sending-messages-to-non-contact-numbers)
-   * @param to chat id: xxxxx@c.us
+   * @param to chat id: `xxxxx@c.us`
    * @param content text message
    */
   public async sendText(to: ChatId, content: Content) {
+    if(!content) content = ''
    const err = [
     'Not able to send message to broadcast',
     'Not a contact',
@@ -1033,8 +1035,10 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
       { to, content }
     );
     if(err.includes(res)) {
-      if(res==err[1]) console.error(`\n${res}. Unlock this feature and support open-wa by getting a license: https://get.openwa.dev/l/${await this.getHostNumber()}\n`)
-      else console.error(res);
+      let msg = res;
+      if(res==err[1]) msg = `\n${res}. Unlock this feature and support open-wa by getting a license: https://get.openwa.dev/l/${await this.getHostNumber()}\n`
+      console.error(msg);
+      throw new CustomError(ERROR_NAME.SENDTEXT_FAILURE, msg)
     }
     return (err.includes(res) ? false : res)  as boolean | MessageId;
   }
@@ -1044,19 +1048,23 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
    * Sends a text message to given chat that includes mentions.
    * In order to use this method correctly you will need to send the text like this:
    * "@4474747474747 how are you?"
-   * Basically, add a @ symbol before the number of the contact you want to mention.
-   * @param to chat id: xxxxx@c.us
+   * Basically, add a @ symbol before the number of the contact you want to mention.  
+   *   
+   * Please note that the hideTag parameter only works with an Insider's License Key  
+   *   
+   * @param to chat id: `xxxxx@c.us`
    * @param content text message
+   * @param hideTags Removes all tags within the message
    */
-  public async sendTextWithMentions(to: ChatId, content: Content) {
+  public async sendTextWithMentions(to: ChatId, content: Content, hideTags?: boolean) {
     //remove all @c.us from the content
     content = content.replace(/@c.us/,"");
     return await this.pup(
-      ({ to, content }) => {
+      ({ to, content, hideTags }) => {
         WAPI.sendSeen(to);
-        return WAPI.sendMessageWithMentions(to, content);
+        return WAPI.sendMessageWithMentions(to, content, hideTags);
       },
-      { to, content }
+      { to, content, hideTags }
     ) as Promise<string>;
   }
 
@@ -1067,7 +1075,7 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
    * In order to use this method correctly you will need to send the text like this:
    * "@4474747474747 how are you?"
    * Basically, add a @ symbol before the number of the contact you want to mention.
-   * @param to chat id: xxxxx@c.us
+   * @param to chat id: `xxxxx@c.us`
    * @param content text message
    * @param replyMessageId id of message to reply to
    */
@@ -1089,14 +1097,15 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
    * 
    * Tags everyone in the group with a message
    * 
-   * @param groupId group chat id: xxxxx@g.us
+   * @param groupId group chat id: `xxxxx@g.us`
    * @param content text message to add under all of the tags
+   * @param hideTags Removes all tags within the message
    * @returns Promise<MessageId>
    */
-  public async tagEveryone(groupId: GroupChatId, content: Content) {
+  public async tagEveryone(groupId: GroupChatId, content: Content, hideTags?: boolean) {
     return await this.pup(
-      ({ groupId, content  }) => WAPI.tagEveryone(groupId, content),
-      { groupId, content }
+      ({ groupId, content, hideTags  }) => WAPI.tagEveryone(groupId, content, hideTags),
+      { groupId, content, hideTags }
     ) as Promise<string>;
   }
 
@@ -1147,7 +1156,7 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
 
   /**
    * Sends a location message to given chat
-   * @param to chat id: xxxxx@c.us
+   * @param to chat id: `xxxxx@c.us`
    * @param lat latitude: '51.5074'
    * @param lng longitude: '0.1278'
    * @param loc location text: 'LONDON!'
@@ -1181,12 +1190,12 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
     //if it's the message id, get the message
     if(typeof message === "string") m = await this.getMessageById(message) 
     else m = message;
-    if(!m.mimetype) throw new Error("Not a media message");
+    if(!m.mimetype) throw new CustomError(ERROR_NAME.NOT_MEDIA,"Not a media message");
     if(m.type == "sticker") m = await this.getStickerDecryptable(m.id);
     //Dont have an insiders license to decrypt stickers
     if(m===false) {
       console.error(`\nUnable to decrypt sticker. Unlock this feature and support open-wa by getting a license: https://get.openwa.dev/l/${await this.getHostNumber()}?v=i\n`)
-      throw new Error('Sticker not decrypted')
+      throw new CustomError(ERROR_NAME.STICKER_NOT_DECRYPTED,'Sticker not decrypted')
     }
     const mediaData = await decryptMedia(m);
     return `data:${m.mimetype};base64,${mediaData.toString('base64')}`
@@ -1194,7 +1203,7 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
 
   /**
    * Sends a image to given chat, with caption or not, using base64
-   * @param to chat id xxxxx@c.us
+   * @param to chat id `xxxxx@c.us`
    * @param file DataURL data:image/xxx;base64,xxx or the RELATIVE (should start with `./` or `../`) path of the file you want to send. With the latest version, you can now set this to a normal URL (for example [GET] `https://file-examples-com.github.io/uploads/2017/10/file_example_JPG_2500kB.jpg`).
    * @param filename string xxxxx
    * @param caption string xxxxx
@@ -1219,7 +1228,7 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
           file = await datauri(fs.existsSync(file)  ? file : relativePath);
         } else if(isUrl(file)){
           return await this.sendFileFromUrl(to,file,filename,caption,quotedMsgId,{},waitForId,ptt,withoutPreview);
-        } else throw new Error('Cannot find file. Make sure the file reference is relative, a valid URL or a valid DataURL')
+        } else throw new CustomError(ERROR_NAME.FILE_NOT_FOUND,'Cannot find file. Make sure the file reference is relative, a valid URL or a valid DataURL')
       }
     
    const err = [
@@ -1306,7 +1315,7 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
 
   /**
    * Sends a file to given chat, with caption or not, using base64. This is exactly the same as sendImage
-   * @param to chat id xxxxx@c.us
+   * @param to chat id `xxxxx@c.us`
    * @param file DataURL data:image/xxx;base64,xxx or the RELATIVE (should start with `./` or `../`) path of the file you want to send. With the latest version, you can now set this to a normal URL (for example [GET] `https://file-examples-com.github.io/uploads/2017/10/file_example_JPG_2500kB.jpg`).
    * @param filename string xxxxx
    * @param caption string xxxxx With an [INSIDERS LICENSE-KEY](https://gum.co/open-wa?tier=Insiders%20Program) you can also tag people in groups with `@[number]`. For example if you want to mention the user with the number `44771234567`, just add `@44771234567` in the caption.
@@ -1348,7 +1357,7 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
 
   /**
    * Attempts to send a file as a voice note. Useful if you want to send an mp3 file.
-   * @param to chat id xxxxx@c.us
+   * @param to chat id `xxxxx@c.us`
    * @param base64 base64 data:image/xxx;base64,xxx or the path of the file you want to send.
    * @param quotedMsgId string true_0000000000@c.us_JHB2HB23HJ4B234HJB to send as a reply to a message
    * @returns Promise <boolean | string> This will either return true or the id of the message. It will return true after 10 seconds even if waitForId is true
@@ -1377,7 +1386,7 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
 
   /**
    * Sends a video to given chat as a gif, with caption or not, using base64
-   * @param to chat id xxxxx@c.us
+   * @param to chat id `xxxxx@c.us`
    * @param file DataURL data:image/xxx;base64,xxx or the RELATIVE (should start with `./` or `../`) path of the file you want to send. With the latest version, you can now set this to a normal URL (for example [GET] `https://file-examples-com.github.io/uploads/2017/10/file_example_JPG_2500kB.jpg`).
    * @param filename string xxxxx
    * @param caption string xxxxx
@@ -1390,7 +1399,7 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
     filename: string,
     caption: Content,
     quotedMsgId?: MessageId,
-    requestConfig: any ={}
+    requestConfig: AxiosRequestConfig ={}
   ) {
       //check if the 'base64' file exists
       if(!isDataURL(file)) {
@@ -1400,7 +1409,7 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
           file = await datauri(fs.existsSync(file)  ? file : relativePath);
         } else if(isUrl(file)){
           file = await getDUrl(file, requestConfig);
-        } else throw new Error('Cannot find file. Make sure the file reference is relative, a valid URL or a valid DataURL')
+        } else throw new CustomError(ERROR_NAME.FILE_NOT_FOUND,'Cannot find file. Make sure the file reference is relative, a valid URL or a valid DataURL')
       }
     return await this.pup(
       ({ to, file, filename, caption, quotedMsgId  }) => {
@@ -1412,7 +1421,7 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
 
   /**
    * Sends a video to given chat as a gif by using a giphy link, with caption or not, using base64
-   * @param to chat id xxxxx@c.us
+   * @param to chat id `xxxxx@c.us`
    * @param giphyMediaUrl string https://media.giphy.com/media/oYtVHSxngR3lC/giphy.gif => https://i.giphy.com/media/oYtVHSxngR3lC/200w.mp4
    * @param caption string xxxxx
    */
@@ -1442,7 +1451,7 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
 
   /**
    * Sends a file by Url or custom options
-   * @param to chat id xxxxx@c.us
+   * @param to chat id `xxxxx@c.us`
    * @param url string https://i.giphy.com/media/oYtVHSxngR3lC/200w.mp4
    * @param filename string 'video.mp4'
    * @param caption string xxxxx
@@ -1458,7 +1467,7 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
     filename: string,
     caption: Content,
     quotedMsgId?: MessageId,
-    requestConfig: any = {},
+    requestConfig: AxiosRequestConfig = {},
     waitForId?: boolean,
     ptt?:boolean,
     withoutPreview?:boolean
@@ -1634,7 +1643,7 @@ public async iAmAdmin(){
    * [REQUIRES AN INSIDERS LICENSE-KEY](https://gum.co/open-wa?tier=Insiders%20Program)
    * 
    * Mutes a conversation for a given duration. If already muted, this will update the muted duration. Mute durations are relative from when the method is called.
-   * @param id The id of the conversation you want to mute
+   * @param chatId The id of the conversation you want to mute
    * @param muteDuration ChatMuteDuration enum of the time you want this chat to be muted for.
    * @return boolean true: worked or error code or message
    */
@@ -1643,6 +1652,19 @@ public async iAmAdmin(){
       ({ chatId, muteDuration }) => WAPI.muteChat(chatId, muteDuration),
       { chatId, muteDuration }
     ) as Promise<boolean | string | number>;
+  }
+
+
+  /**
+   * Checks if a chat is muted
+   * @param chatId The id of the chat you want to check
+   * @returns boolean. `false` if the chat does not exist.
+   */
+  public async isChatMuted(chatId: ChatId){
+    return await this.pup(
+      ({ chatId }) => WAPI.isChatMuted(chatId),
+      { chatId }
+    ) as Promise<boolean>;
   }
 
 
@@ -2066,7 +2088,7 @@ public async contactUnblock(id: ContactId) {
   
   /**
    * Sets a chat status to seen. Marks all messages as ack: 3
-   * @param chatId chat id: xxxxx@c.us
+   * @param chatId chat id: `xxxxx@c.us`
    */
   public async sendSeen(chatId: ChatId) {
     return await this.pup(
@@ -2078,7 +2100,7 @@ public async contactUnblock(id: ContactId) {
   
   /**
    * Sets a chat status to unread. May be useful to get host's attention
-   * @param chatId chat id: xxxxx@c.us
+   * @param chatId chat id: `xxxxx@c.us`
    */
   public async markAsUnread(chatId: ChatId) {
     return await this.pup(
@@ -2092,7 +2114,7 @@ public async contactUnblock(id: ContactId) {
    * 
    * It will return `true` if the chat is `online`, `false` if the chat is `offline`, `PRIVATE` if the privacy settings of the contact do not allow you to see their status and `NO_CHAT` if you do not currently have a chat with that contact.
    * 
-   * @param chatId chat id: xxxxx@c.us
+   * @param chatId chat id: `xxxxx@c.us`
    */
   public async isChatOnline(chatId: ChatId) {
     return await this.pup(
@@ -2341,8 +2363,8 @@ public async getStatus(contactId: ContactId) {
    * 
    * If the participantId does not exist in the group chat, returns `NOT_A_PARTICIPANT`
    * 
-   * @param {*} groupId '0000000000-00000000@g.us'
-   * @param {*} participantId '000000000000@c.us'
+   * @param {*} groupId `0000000000-00000000@g.us`
+   * @param {*} participantId `000000000000@c.us`
    */
   public async removeParticipant(groupId: GroupChatId, participantId: ContactId) {
     return await this.pup(
@@ -2389,7 +2411,7 @@ public async getStatus(contactId: ContactId) {
  * @param requestConfig {} By default the request is a get request, however you can override that and many other options by sending this parameter. You can read more about this parameter here: https://github.com/axios/axios#request-config
  * @returns boolean true if it was set, false if it didn't work. It usually doesn't work if the image file is too big.
  */
-  public async setGroupIconByUrl(groupId: GroupChatId, url: string, requestConfig: any = {}) {
+  public async setGroupIconByUrl(groupId: GroupChatId, url: string, requestConfig: AxiosRequestConfig = {}) {
     try {
       const base64 = await getDUrl(url, requestConfig);
        return await this.setGroupIcon(groupId,base64);
@@ -2574,10 +2596,10 @@ public async getStatus(contactId: ContactId) {
    *
    * @returns Promise<MessageId | boolean>
    */
-  public async sendStickerfromUrl(to: ChatId, url: string, requestConfig: any = {}) {
+  public async sendStickerfromUrl(to: ChatId, url: string, requestConfig: AxiosRequestConfig = {}, stickerMetadata ?: StickerMetadata) {
     try {
       const base64 = await getDUrl(url, requestConfig);
-      return await this.sendImageAsSticker(to, base64);
+      return await this.sendImageAsSticker(to, base64, stickerMetadata);
      } catch(error) {
        console.log('Something went wrong', error);
        throw error;
@@ -2595,9 +2617,9 @@ public async getStatus(contactId: ContactId) {
    * 
    * @returns Promise<MessageId | boolean>
    */
-  public async sendStickerfromUrlAsReply(to: ChatId, url: string, messageId: MessageId, requestConfig: any = {}) {
+  public async sendStickerfromUrlAsReply(to: ChatId, url: string, messageId: MessageId, requestConfig: AxiosRequestConfig = {}, stickerMetadata ?: StickerMetadata) {
     const dUrl = await getDUrl(url, requestConfig);
-    let processingResponse = await this.prepareWebp(dUrl);
+    let processingResponse = await this.prepareWebp(dUrl, stickerMetadata);
     if(!processingResponse) return false;
     let {webpBase64, metadata} = processingResponse;
       return await this.pup(
@@ -2658,26 +2680,31 @@ public async getStatus(contactId: ContactId) {
           a[key] = await datauri(fs.existsSync(a[key])  ? a[key] : relativePath);
         } else {
           console.error('FILE_NOT_FOUND')
-          return false
+          throw new CustomError(ERROR_NAME.FILE_NOT_FOUND, 'FILE NOT FOUND')
         }
       }
-      if(a?.stickerMetadata && typeof a?.stickerMetadata !== "object") throw new Error(`Expected stickerMetadata object. Received ${typeof a?.stickerMetadata}: ${a?.stickerMetadata}`);
+      if(a?.stickerMetadata && typeof a?.stickerMetadata !== "object") throw new CustomError(ERROR_NAME.BAD_STICKER_METADATA, `Received ${typeof a?.stickerMetadata}: ${a?.stickerMetadata}`);
       try {
         const {data} = await axios.post(`${'https://open-wa-sticker-api.herokuapp.com' || this._createConfig.stickerServerEndpoint}/${func}`, {
           ...a,
         sessionInfo: this.getSessionInfo(),
         config: this.getConfig()
       },{
-        maxBodyLength: 20000000
+        maxBodyLength: 20000000,
+        maxContentLength: 1500000
       });
         return data;
       } catch (err) {
+        if(err?.message.includes("maxContentLength size")) {
+          throw new CustomError(ERROR_NAME.STICKER_TOO_LARGE, err?.message)
+        }
         console.error(err?.response?.status, err?.response?.data);
+        throw err;
         return false;
       }
     } else {
       console.error("Media is missing from this request");
-      return false;
+      throw new CustomError(ERROR_NAME.MEDIA_MISSING, "Media is missing from this request")
     }
   }
 
@@ -2774,8 +2801,9 @@ public async getStatus(contactId: ContactId) {
       if(!convertedStickerDataUrl) return false;
       return await this.sendRawWebpAsSticker(to, convertedStickerDataUrl, true);
     } catch (error) {
-      console.log('Stickers have to be less than 1MB. Please lower the fps or shorten the duration using the processOptions parameter: https://open-wa.github.io/wa-automate-nodejs/classes/client.html#sendmp4assticker')
-      throw error;
+      const msg = 'Stickers have to be less than 1MB. Please lower the fps or shorten the duration using the processOptions parameter: https://open-wa.github.io/wa-automate-nodejs/classes/client.html#sendmp4assticker'
+      console.log(msg)
+      throw new CustomError(ERROR_NAME.STICKER_TOO_LARGE,msg);
     }
   }
 
@@ -2965,7 +2993,7 @@ public async getStatus(contactId: ContactId) {
    * @returns base64 string (non-data url)
    */
   public async downloadFileWithCredentials(url: string){
-    if(!url) throw new Error('Missing URL');
+    if(!url) throw new CustomError(ERROR_NAME.MISSING_URL, 'Missing URL');
     return await this.pup(({ url }) => WAPI.downloadFileWithCredentials(url),{url});
   }
   
@@ -3116,7 +3144,7 @@ public async getStatus(contactId: ContactId) {
    * @param requestConfig {} By default the request is a post request, however you can override that and many other options by sending this parameter. You can read more about this parameter here: https://github.com/axios/axios#request-config
    * @param concurrency the amount of concurrent requests to be handled by the built in queue. Default is 5.
    */
-  public async registerWebhook(event: SimpleListener, url: string, requestConfig: any = {}, concurrency: number = 5) {
+  public async registerWebhook(event: SimpleListener, url: string, requestConfig: AxiosRequestConfig = {}, concurrency: number = 5) {
     if(!this._webhookQueue) this._webhookQueue = new PQueue({ concurrency });
     if(this[event]){
       if(!this._registeredWebhooks) this._registeredWebhooks={};

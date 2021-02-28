@@ -3,7 +3,7 @@
 <head>
 	<meta charset="utf-8">
 	<meta http-equiv="X-UA-Compatible" content="IE=edge">
-	<title>MessageAck | @open-wa/wa-automate - v3.6.13</title>
+	<title>ChatMuteDuration | @open-wa/wa-automate - v3.6.13</title>
 	<meta name="description" content="Documentation for @open-wa/wa-automate - v3.6.13">
 	<meta name="viewport" content="width=device-width, initial-scale=1">
 	<link rel="stylesheet" href="../assets/css/main.css">
@@ -53,10 +53,10 @@
 					<a href="../globals.html">Globals</a>
 				</li>
 				<li>
-					<a href="messageack.html">MessageAck</a>
+					<a href="chatmuteduration.html">ChatMuteDuration</a>
 				</li>
 			</ul>
-			<h1>Enumeration MessageAck</h1>
+			<h1>Enumeration ChatMuteDuration</h1>
 		</div>
 	</div>
 </header>
@@ -66,7 +66,7 @@
 			<section class="tsd-panel tsd-comment">
 				<div class="tsd-comment tsd-typography">
 					<div class="lead">
-						<p>Message ACK</p>
+						<p>Valid durations for muting a chat using <a href="../classes/client.html#mutechat">muteChat</a></p>
 					</div>
 					<dl class="tsd-comment-tags">
 						<dt>readonly</dt>
@@ -81,12 +81,9 @@
 						<section class="tsd-index-section ">
 							<h3>Enumeration members</h3>
 							<ul class="tsd-index-list">
-								<li class="tsd-kind-enum-member tsd-parent-kind-enum"><a href="messageack.html#ack_device" class="tsd-kind-icon">ACK_<wbr>DEVICE</a></li>
-								<li class="tsd-kind-enum-member tsd-parent-kind-enum"><a href="messageack.html#ack_error" class="tsd-kind-icon">ACK_<wbr>ERROR</a></li>
-								<li class="tsd-kind-enum-member tsd-parent-kind-enum"><a href="messageack.html#ack_pending" class="tsd-kind-icon">ACK_<wbr>PENDING</a></li>
-								<li class="tsd-kind-enum-member tsd-parent-kind-enum"><a href="messageack.html#ack_played" class="tsd-kind-icon">ACK_<wbr>PLAYED</a></li>
-								<li class="tsd-kind-enum-member tsd-parent-kind-enum"><a href="messageack.html#ack_read" class="tsd-kind-icon">ACK_<wbr>READ</a></li>
-								<li class="tsd-kind-enum-member tsd-parent-kind-enum"><a href="messageack.html#ack_server" class="tsd-kind-icon">ACK_<wbr>SERVER</a></li>
+								<li class="tsd-kind-enum-member tsd-parent-kind-enum"><a href="chatmuteduration.html#eight_hours" class="tsd-kind-icon">EIGHT_<wbr>HOURS</a></li>
+								<li class="tsd-kind-enum-member tsd-parent-kind-enum"><a href="chatmuteduration.html#forever" class="tsd-kind-icon">FOREVER</a></li>
+								<li class="tsd-kind-enum-member tsd-parent-kind-enum"><a href="chatmuteduration.html#one_week" class="tsd-kind-icon">ONE_<wbr>WEEK</a></li>
 							</ul>
 						</section>
 					</div>
@@ -95,64 +92,49 @@
 			<section class="tsd-panel-group tsd-member-group ">
 				<h2>Enumeration members</h2>
 				<section class="tsd-panel tsd-member tsd-kind-enum-member tsd-parent-kind-enum">
-					<a name="ack_device" class="tsd-anchor"></a>
-					<h3>ACK_<wbr>DEVICE</h3>
-					<div class="tsd-signature tsd-kind-icon">ACK_<wbr>DEVICE<span class="tsd-signature-symbol">:</span> <span class="tsd-signature-symbol"> = 2</span></div>
+					<a name="eight_hours" class="tsd-anchor"></a>
+					<h3>EIGHT_<wbr>HOURS</h3>
+					<div class="tsd-signature tsd-kind-icon">EIGHT_<wbr>HOURS<span class="tsd-signature-symbol">:</span> <span class="tsd-signature-symbol"> = &quot;EIGHT_HOURS&quot;</span></div>
 					<aside class="tsd-sources">
 						<ul>
-							<li>Defined in <a href="https://github.com/open-wa/wa-automate-nodejs/blob/4e15f192/src/api/model/message.ts#L147">src/api/model/message.ts:147</a></li>
+							<li>Defined in <a href="https://github.com/open-wa/wa-automate-nodejs/blob/4e15f192/src/api/model/chat.ts#L92">src/api/model/chat.ts:92</a></li>
 						</ul>
 					</aside>
+					<div class="tsd-comment tsd-typography">
+						<div class="lead">
+							<p>Mutes chat for 8 hours</p>
+						</div>
+					</div>
 				</section>
 				<section class="tsd-panel tsd-member tsd-kind-enum-member tsd-parent-kind-enum">
-					<a name="ack_error" class="tsd-anchor"></a>
-					<h3>ACK_<wbr>ERROR</h3>
-					<div class="tsd-signature tsd-kind-icon">ACK_<wbr>ERROR<span class="tsd-signature-symbol">:</span> <span class="tsd-signature-symbol"> = -1</span></div>
+					<a name="forever" class="tsd-anchor"></a>
+					<h3>FOREVER</h3>
+					<div class="tsd-signature tsd-kind-icon">FOREVER<span class="tsd-signature-symbol">:</span> <span class="tsd-signature-symbol"> = &quot;FOREVER&quot;</span></div>
 					<aside class="tsd-sources">
 						<ul>
-							<li>Defined in <a href="https://github.com/open-wa/wa-automate-nodejs/blob/4e15f192/src/api/model/message.ts#L144">src/api/model/message.ts:144</a></li>
+							<li>Defined in <a href="https://github.com/open-wa/wa-automate-nodejs/blob/4e15f192/src/api/model/chat.ts#L100">src/api/model/chat.ts:100</a></li>
 						</ul>
 					</aside>
+					<div class="tsd-comment tsd-typography">
+						<div class="lead">
+							<p>Mutes chat forever</p>
+						</div>
+					</div>
 				</section>
 				<section class="tsd-panel tsd-member tsd-kind-enum-member tsd-parent-kind-enum">
-					<a name="ack_pending" class="tsd-anchor"></a>
-					<h3>ACK_<wbr>PENDING</h3>
-					<div class="tsd-signature tsd-kind-icon">ACK_<wbr>PENDING<span class="tsd-signature-symbol">:</span> <span class="tsd-signature-symbol"> = 0</span></div>
+					<a name="one_week" class="tsd-anchor"></a>
+					<h3>ONE_<wbr>WEEK</h3>
+					<div class="tsd-signature tsd-kind-icon">ONE_<wbr>WEEK<span class="tsd-signature-symbol">:</span> <span class="tsd-signature-symbol"> = &quot;ONE_WEEK&quot;</span></div>
 					<aside class="tsd-sources">
 						<ul>
-							<li>Defined in <a href="https://github.com/open-wa/wa-automate-nodejs/blob/4e15f192/src/api/model/message.ts#L145">src/api/model/message.ts:145</a></li>
+							<li>Defined in <a href="https://github.com/open-wa/wa-automate-nodejs/blob/4e15f192/src/api/model/chat.ts#L96">src/api/model/chat.ts:96</a></li>
 						</ul>
 					</aside>
-				</section>
-				<section class="tsd-panel tsd-member tsd-kind-enum-member tsd-parent-kind-enum">
-					<a name="ack_played" class="tsd-anchor"></a>
-					<h3>ACK_<wbr>PLAYED</h3>
-					<div class="tsd-signature tsd-kind-icon">ACK_<wbr>PLAYED<span class="tsd-signature-symbol">:</span> <span class="tsd-signature-symbol"> = 4</span></div>
-					<aside class="tsd-sources">
-						<ul>
-							<li>Defined in <a href="https://github.com/open-wa/wa-automate-nodejs/blob/4e15f192/src/api/model/message.ts#L149">src/api/model/message.ts:149</a></li>
-						</ul>
-					</aside>
-				</section>
-				<section class="tsd-panel tsd-member tsd-kind-enum-member tsd-parent-kind-enum">
-					<a name="ack_read" class="tsd-anchor"></a>
-					<h3>ACK_<wbr>READ</h3>
-					<div class="tsd-signature tsd-kind-icon">ACK_<wbr>READ<span class="tsd-signature-symbol">:</span> <span class="tsd-signature-symbol"> = 3</span></div>
-					<aside class="tsd-sources">
-						<ul>
-							<li>Defined in <a href="https://github.com/open-wa/wa-automate-nodejs/blob/4e15f192/src/api/model/message.ts#L148">src/api/model/message.ts:148</a></li>
-						</ul>
-					</aside>
-				</section>
-				<section class="tsd-panel tsd-member tsd-kind-enum-member tsd-parent-kind-enum">
-					<a name="ack_server" class="tsd-anchor"></a>
-					<h3>ACK_<wbr>SERVER</h3>
-					<div class="tsd-signature tsd-kind-icon">ACK_<wbr>SERVER<span class="tsd-signature-symbol">:</span> <span class="tsd-signature-symbol"> = 1</span></div>
-					<aside class="tsd-sources">
-						<ul>
-							<li>Defined in <a href="https://github.com/open-wa/wa-automate-nodejs/blob/4e15f192/src/api/model/message.ts#L146">src/api/model/message.ts:146</a></li>
-						</ul>
-					</aside>
+					<div class="tsd-comment tsd-typography">
+						<div class="lead">
+							<p>Mutes chat for 1 week</p>
+						</div>
+					</div>
 				</section>
 			</section>
 		</div>
@@ -241,25 +223,16 @@
 				</ul>
 				<ul class="current">
 					<li class="current tsd-kind-enum">
-						<a href="messageack.html" class="tsd-kind-icon">Message<wbr>Ack</a>
+						<a href="chatmuteduration.html" class="tsd-kind-icon">Chat<wbr>Mute<wbr>Duration</a>
 						<ul>
 							<li class=" tsd-kind-enum-member tsd-parent-kind-enum">
-								<a href="messageack.html#ack_device" class="tsd-kind-icon">ACK_<wbr>DEVICE</a>
+								<a href="chatmuteduration.html#eight_hours" class="tsd-kind-icon">EIGHT_<wbr>HOURS</a>
 							</li>
 							<li class=" tsd-kind-enum-member tsd-parent-kind-enum">
-								<a href="messageack.html#ack_error" class="tsd-kind-icon">ACK_<wbr>ERROR</a>
+								<a href="chatmuteduration.html#forever" class="tsd-kind-icon">FOREVER</a>
 							</li>
 							<li class=" tsd-kind-enum-member tsd-parent-kind-enum">
-								<a href="messageack.html#ack_pending" class="tsd-kind-icon">ACK_<wbr>PENDING</a>
-							</li>
-							<li class=" tsd-kind-enum-member tsd-parent-kind-enum">
-								<a href="messageack.html#ack_played" class="tsd-kind-icon">ACK_<wbr>PLAYED</a>
-							</li>
-							<li class=" tsd-kind-enum-member tsd-parent-kind-enum">
-								<a href="messageack.html#ack_read" class="tsd-kind-icon">ACK_<wbr>READ</a>
-							</li>
-							<li class=" tsd-kind-enum-member tsd-parent-kind-enum">
-								<a href="messageack.html#ack_server" class="tsd-kind-icon">ACK_<wbr>SERVER</a>
+								<a href="chatmuteduration.html#one_week" class="tsd-kind-icon">ONE_<wbr>WEEK</a>
 							</li>
 						</ul>
 					</li>

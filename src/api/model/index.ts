@@ -1,8 +1,7 @@
-import { Client } from '../..';
-
-export { Chat } from './chat';
-export { Contact } from './contact';
-export { Message } from './message';
+export * from './chat';
+export * from './contact';
+export * from './message';
+export * from './errors';
 
 
 /**

@@ -193,10 +193,10 @@ if (c && c.session) {
 	c.sessionData = c.session;
 }
 
-if (c && c.licenseKey) {
+if (c && (c.licenseKey || c.l)) {
 	config = {
 		...config,
-		licenseKey: c.licenseKey
+		licenseKey: c.licenseKey || c.l
 	}
 }
 
@@ -248,7 +248,7 @@ async function start(){
     } catch (error) {
         if(error.code==="ECONNREFUSED") console.log('fresh run')
 	}
-	config.headless=!c.headful
+	config.headless= config.headless && (config.headless === true || config.headless === false || config.headless === "true" || config.headless === "false") ? config.headless : !c.headful
 	if(c.ev) {
 		ev.on('**', async (data,sessionId,namespace) => {
 			if(!c.allowSessionDataWebhook && (namespace=="sessionData" || namespace=="sessionDataBase64")) return;
@@ -385,13 +385,13 @@ return await create({ ...config })
 			  elasticsearch:process.env.elastic_url,
 			  elasticsearchUsername:process.env.elastic_un,
 			  elasticsearchPassword:process.env.elastic_pw,
-			  swaggerSpec:require("./open-wa-" + c.sessionId + ".sw_col.json"),
+			  swaggerSpec:swCol,
 			  authentication: !!c.key,
 			  swaggerOnly: true,
 			  onResponseFinish: function(req,res,rrr){
 				['file', 'base64', 'image', 'webpBase64', 'base64', 'durl', 'thumbnail'].forEach(key => {
 					if(req.body.args[key])
-					req.body.args[key] = rrr.http.request.body.args[key] = req.body.args[key]?.slice(0,25) || 'EMPTY'
+					req.body.args[key] = rrr.http.request.body.args[key] = req.body.args[key].slice(0,25) || 'EMPTY'
 				});
 				if(rrr.http.response.code!==200 && rrr.http.response.code!==404) {
 				  rrr.http.response.phrase = res.statusMessage

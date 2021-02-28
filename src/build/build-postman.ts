@@ -27,29 +27,37 @@ var primatives = [
     'boolean'
 ];
 
-async function getMethodDocs(){
+async function getMethodsWithDocs(){
     const {Project} = await import("ts-morph");
-
     const project = new Project({
         compilerOptions: {
             target: ScriptTarget.ESNext,
         },
     });
-    let res = {};
-    const sourceFile = project.addSourceFileAtPath(path.resolve(__dirname,'../api/_client_ts'));
+    let res = [];
+    const fp = fs.existsSync(path.resolve(__dirname,'../api/Client.d.ts')) ? '../api/Client.d.ts' : '../api/Client.ts'
+    const sourceFile = project.addSourceFileAtPath(path.resolve(__dirname,fp));
     for (const method of sourceFile.getClass('Client').getMethods()){
-        if(method.hasModifier(SyntaxKind.PublicKeyword)) {
-            res[method.getName()] = format(method.getJsDocs()[0]?.getInnerText())
+        if(!method.hasModifier(SyntaxKind.PrivateKeyword)) {
+        res.push({
+            name: method.getName(),
+            parameters: method.getParameters().map(param=> {
+                return {
+                    name: param.getName(),
+                    type: param.getTypeNode()?.getText() || (param.getType()?.getAliasSymbol() || param.getType()?.getSymbol())?.getEscapedName(),
+                    isOptional: param.isOptional(),
+                }
+            }),
+            text: format(method.getJsDocs()[0]?.getInnerText())
+        })
         }
     }
     return res;
 }
 
 export const generatePostmanJson = async function (setup : any = {}) {
-    const {TypescriptParser} = await import("typescript-parser");
     if(!noCase) noCase = (await import("change-case")).noCase;
 
-    var parser = new TypescriptParser();
     if(setup?.apiHost) {
         if(setup.apiHost.includes(setup.sessionId)){
         const parsed = parseUrl(setup.apiHost);
@@ -57,11 +65,8 @@ export const generatePostmanJson = async function (setup : any = {}) {
         setup.port = parsed.port;
         }
     }
-    const data = fs.readFileSync(path.resolve(__dirname,'../api/_client_ts'), 'utf8');
-    const s = await getMethodDocs();
-    const parsed = await parser.parseSource(data);
-    //@ts-ignore
-    let x = parsed.declarations.find(({name})=>name==='Client').methods.filter(({visibility})=>visibility==2).filter(({name})=>!name.startsWith('on')).map(method=>({
+    const s = await getMethodsWithDocs();
+    let x = s.filter(({visibility})=>visibility==2 || visibility==undefined).filter(({name})=>!name.startsWith('on')).map(method=>({
         text: s[method.name] || '',
         ...method
     }));
@@ -224,5 +229,3 @@ var postmanWrapGen = function (setup) { return function (item) {
         "protocolProfileBehavior": {}
     };
 }; };
-// uncomment to test
-// generatePostmanJson();
