@@ -5,7 +5,7 @@ import { Message } from './model/message';
 import { default as axios, AxiosRequestConfig} from 'axios';
 import { ParticipantChangedEventModel } from './model/group-metadata';
 import { useragent, puppeteerConfig } from '../config/puppeteer.config'
-import { ConfigObject, STATE } from './model';
+import { ConfigObject, STATE, LicenseType } from './model';
 import { PageEvaluationTimeout, CustomError, ERROR_NAME  } from './model/errors';
 import PQueue from 'p-queue';
 import { ev } from '../controllers/events';
@@ -258,7 +258,7 @@ declare module WAPI {
   const addParticipant: (groupId: string, contactId: string) => Promise<boolean | string>;
   const sendGiphyAsSticker: (chatId: string, url: string) => Promise<any>;
   const getMessageById: (mesasgeId: string) => Message;
-  const getMyLastMessage: (chatId: string) => Message;
+  const getMyLastMessage: (chatId: string) => Promise<Message>;
   const getStickerDecryptable: (mesasgeId: string) => Message | boolean;
   const forceStaleMediaUpdate: (mesasgeId: string) => Message | boolean;
   const setMyName: (newName: string) => Promise<boolean>;
@@ -339,6 +339,7 @@ declare module WAPI {
   const getStoryViewers: (id: string) => Promise<String[]>;
   const getMe: () => any;
   const iAmAdmin: () => Promise<String[]>;
+  const getLicenseType: () => Promise<String | false>;
   const getChatWithNonContacts: () => Contact[];
   const syncContacts: () => boolean;
   const getAmountOfLoadedMessages: () => number;
@@ -363,7 +364,7 @@ declare module WAPI {
   const getAllNewMessages: () => any;
   const getUseHereString: () => Promise<string>;
   const getHostNumber: () => string;
-  const getAllGroups: () => Chat[];
+  const getAllGroups: () => Promise<Chat[]>;
   const getGroupParticipantIDs: (groupId: string) => Promise<string[]>;
   const getGroupInfo: (groupId: string) => Promise<any>;
   const joinGroupViaLink: (link: string) => Promise<string | boolean | number>;
@@ -447,7 +448,7 @@ export class Client {
   }
 
   getSessionId(){
-    return this._createConfig.sessionId
+    return this._createConfig.sessionId || 'session'
   }
 
   getPage(){
@@ -544,7 +545,7 @@ export class Client {
       const state = await this.forceUpdateConnectionState();
       if(state!==STATE.CONNECTED) throw new CustomError(ERROR_NAME.STATE_ERROR,`state: ${state}`);
     }
-    if(idChecking) {
+    if(idChecking && args[0]) {
       Object.entries(args[0]).map(([k,v] : [string,any]) => {
         if(["to","chatId", "groupChatId", "groupId", "contactId"].includes(k) && typeof v == "string" && v) {
         args[0][k] = v?.includes('-') ? 
@@ -1110,6 +1111,7 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
   }
 
   /**
+   * @deprecated Use [[sendLinkWithAutoPreview]] instead
    * Sends a link to a chat that includes a link preview.
    * @param thumb The base 64 data of the image you want to use as the thunbnail. This should be no more than 200x200px. Note: Dont need data url on this param
    * @param url The link you want to send
@@ -1119,6 +1121,7 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
    * @param chatId The chat you want to send this message to.
    * 
    */
+  @deprecated
   public async sendMessageWithThumb(
     thumb: string,
     url: string,
@@ -1755,6 +1758,13 @@ public async iAmAdmin(){
     return await this.pup(() => WAPI.getHostNumber()) as Promise<string>;
   }
 
+  /**
+   * Returns the the type of license key used by the session.
+   * @returns
+   */
+  public async getLicenseType(){
+    return await this.pup(() => WAPI.getLicenseType()) as Promise<LicenseType | false>;
+  }
   /**
    * Retrieves all chats
    * @returns array of [Chat]
