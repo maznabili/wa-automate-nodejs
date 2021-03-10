@@ -5,10 +5,11 @@ import { Message } from './model/message';
 import { default as axios, AxiosRequestConfig} from 'axios';
 import { ParticipantChangedEventModel } from './model/group-metadata';
 import { useragent, puppeteerConfig } from '../config/puppeteer.config'
-import { ConfigObject, STATE, LicenseType } from './model';
+import { ConfigObject, STATE, LicenseType, Webhook } from './model';
 import { PageEvaluationTimeout, CustomError, ERROR_NAME  } from './model/errors';
 import PQueue from 'p-queue';
 import { ev } from '../controllers/events';
+import { v4 as uuidv4 } from 'uuid';
 /** @ignore */
 const parseFunction = require('parse-function'),
 pkg = require('../../package.json'),
@@ -411,6 +412,15 @@ export class Client {
   private _page: Page;
   private _currentlyBeingKilled: boolean = false;
   private _l: any;
+  /**
+   * This is used to track if a listener is already used via webhook. Before, webhooks used to be set once per listener. Now a listener can be set via multiple webhooks, or revoked from a specific webhook.
+   * For this reason, listeners assigned to a webhook are only set once and map through all possible webhooks to and fire only if the specific listener is assigned.
+   * 
+   * Note: This would be much simpler if eventMode was the default (and only) listener strategy.
+   */
+   private _registeredWebhookListeners = {};
+
+
 
   /**
    * @ignore
@@ -1010,6 +1020,10 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
 
 
   
+  private async link(params ?: string){
+    const _p = [this._createConfig?.linkParams,params].filter(x=>x).join('&')
+    return `https://get.openwa.dev/l/${await this.getHostNumber()}${_p?`?${_p}`:''}`
+  }
 
   /**
    * Sends a text message to given chat
@@ -1037,7 +1051,7 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
     );
     if(err.includes(res)) {
       let msg = res;
-      if(res==err[1]) msg = `\n${res}. Unlock this feature and support open-wa by getting a license: https://get.openwa.dev/l/${await this.getHostNumber()}\n`
+      if(res==err[1]) msg = `\n${res}. Unlock this feature and support open-wa by getting a license: ${await this.link()}\n`
       console.error(msg);
       throw new CustomError(ERROR_NAME.SENDTEXT_FAILURE, msg)
     }
@@ -1121,7 +1135,6 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
    * @param chatId The chat you want to send this message to.
    * 
    */
-  @deprecated
   public async sendMessageWithThumb(
     thumb: string,
     url: string,
@@ -1197,7 +1210,7 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
     if(m.type == "sticker") m = await this.getStickerDecryptable(m.id);
     //Dont have an insiders license to decrypt stickers
     if(m===false) {
-      console.error(`\nUnable to decrypt sticker. Unlock this feature and support open-wa by getting a license: https://get.openwa.dev/l/${await this.getHostNumber()}?v=i\n`)
+      console.error(`\nUnable to decrypt sticker. Unlock this feature and support open-wa by getting a license: ${await this.link("v=i")}\n`)
       throw new CustomError(ERROR_NAME.STICKER_NOT_DECRYPTED,'Sticker not decrypted')
     }
     const mediaData = await decryptMedia(m);
@@ -1224,7 +1237,7 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
     withoutPreview?:boolean
   ) {
       //check if the 'base64' file exists
-      if(!isDataURL(file)) {
+      if(!isDataURL(file) && !isBase64(file)) {
         //must be a file then
         let relativePath = path.join(path.resolve(process.cwd(),file|| ''));
         if(fs.existsSync(file) || fs.existsSync(relativePath)) {
@@ -2646,11 +2659,26 @@ public async getStatus(contactId: ContactId) {
    * 
    * 
    * @param to  The recipient id.
-   * @param image  This is the base64 string formatted with data URI. You can also send a plain base64 string but it may result in an error as the function will not be able to determine the filetype before sending.
+   * @param image: [[DataURL]], [[Base64]], URL (string GET), Relative filepath (string), or Buffer of the image
    * @param messageId  The id of the message to reply to
+   * @param stickerMetadata  Sticker metadata
    */
-  public async sendImageAsStickerAsReply(to: ChatId, image: DataURL, messageId: MessageId, stickerMetadata ?: StickerMetadata){
-    let processingResponse = await this.prepareWebp(image, stickerMetadata);
+  public async sendImageAsStickerAsReply(to: ChatId, image: DataURL | Buffer | Base64 | string, messageId: MessageId, stickerMetadata ?: StickerMetadata){
+    //@ts-ignore
+    if((Buffer.isBuffer(image)  || typeof image === 'object' || image?.type === 'Buffer') && image.toString) {image = image.toString('base64')} else if(typeof image === 'string') {
+      if(!isDataURL(image) && !isBase64(image)) {
+        //must be a file then
+        if(isUrl(image)){
+          image = await getDUrl(image)
+        } else {
+          let relativePath = path.join(path.resolve(process.cwd(),image|| ''));
+          if(fs.existsSync(image) || fs.existsSync(relativePath)) {
+            image = await datauri(fs.existsSync(image)  ? image : relativePath);
+          } else return 'FILE_NOT_FOUND';
+        } 
+      }
+      }
+    let processingResponse = await this.prepareWebp(image as string, stickerMetadata);
     if(!processingResponse) return false;
     let {webpBase64, metadata} = processingResponse;
       return await this.pup(
@@ -2679,8 +2707,9 @@ public async getStatus(contactId: ContactId) {
     );
   }
 
-  private async stickerServerRequest(func: string, a : any = {}){
+  private async stickerServerRequest(func: string, a : any = {}, fallback : boolean = false){
     if(!this._createConfig.stickerServerEndpoint) return false;
+    if(func === 'convertMp4BufferToWebpDataUrl') fallback = true;
     if(a.file || a.image) {
       //check if its a local file:
       const key = a.file ? 'file' : 'image';
@@ -2695,7 +2724,7 @@ public async getStatus(contactId: ContactId) {
       }
       if(a?.stickerMetadata && typeof a?.stickerMetadata !== "object") throw new CustomError(ERROR_NAME.BAD_STICKER_METADATA, `Received ${typeof a?.stickerMetadata}: ${a?.stickerMetadata}`);
       try {
-        const {data} = await axios.post(`${'https://open-wa-sticker-api.herokuapp.com' || this._createConfig.stickerServerEndpoint}/${func}`, {
+        const {data} = await axios.post(`${(fallback ?  pkg.stickerUrl : 'https://open-wa-sticker-api.herokuapp.com'  )|| this._createConfig.stickerServerEndpoint}/${func}`, {
           ...a,
         sessionInfo: this.getSessionInfo(),
         config: this.getConfig()
@@ -2707,6 +2736,8 @@ public async getStatus(contactId: ContactId) {
       } catch (err) {
         if(err?.message.includes("maxContentLength size")) {
           throw new CustomError(ERROR_NAME.STICKER_TOO_LARGE, err?.message)
+        } else if(!fallback){
+          return await this.stickerServerRequest(func, a, true)
         }
         console.error(err?.response?.status, err?.response?.data);
         throw err;
@@ -2760,10 +2791,27 @@ public async getStatus(contactId: ContactId) {
    * This function takes an image (including animated GIF) and sends it as a sticker to the recipient. This is helpful for sending semi-ephemeral things like QR codes. 
    * The advantage is that it will not show up in the recipients gallery. This function automatiicaly converts images to the required webp format.
    * @param to: The recipient id.
-   * @param image: This is the base64 string formatted as a data URI. 
+   * @param image: [[DataURL]], [[Base64]], URL (string GET), Relative filepath (string), or Buffer of the image
    */
-  public async sendImageAsSticker(to: ChatId, image: DataURL, stickerMetadata?: StickerMetadata){
-    let processingResponse = await this.prepareWebp(image, stickerMetadata);
+  public async sendImageAsSticker(to: ChatId, image: DataURL | Buffer | Base64 | string, stickerMetadata?: StickerMetadata){
+    //@ts-ignore
+    if((Buffer.isBuffer(image)  || typeof image === 'object' || image?.type === 'Buffer') && image.toString) {
+      image = image.toString('base64')
+    } else if(typeof image === 'string') {
+      if(!isDataURL(image) && !isBase64(image)) {
+        //must be a file then
+        if(isUrl(image)){
+          image = await getDUrl(image)
+        } else {
+          let relativePath = path.join(path.resolve(process.cwd(),image|| ''));
+          if(fs.existsSync(image) || fs.existsSync(relativePath)) {
+            image = await datauri(fs.existsSync(image)  ? image : relativePath);
+          } else return 'FILE_NOT_FOUND';
+        } 
+      }
+      }
+    
+    let processingResponse = await this.prepareWebp(image as string, stickerMetadata);
     if(!processingResponse) return false;
     let {webpBase64, metadata} = processingResponse;
       return await this.pup(
@@ -3124,26 +3172,50 @@ public async getStatus(contactId: ContactId) {
   }
 
   /**
-   * Retreives a list of [[SimpleListener]] that are registered to webhooks.
+   * Retreives an array of webhook objects
    */
   public async listWebhooks(){
-    return Object.keys(this._registeredWebhooks) as SimpleListener[];
+    return this._registeredWebhooks ? Object.keys(this._registeredWebhooks).map(id=>this._registeredWebhooks[id]).map(({
+      requestConfig,
+      ...rest
+    })=>rest) as Webhook[] : [];
   }
 
   /**
    * Removes a webhook.
    * 
-   * Returns `true` if the webhook was found and removed. `false` if the webhook was not found and therefore could not be removed.
+   * Returns `true` if the webhook was found and removed. `false` if the webhook was not found and therefore could not be removed. This does not unregister any listeners off of other webhooks.
    * 
-   * @param simpleListener The webhook name to remove.
+   * 
+   * @param webhookId The ID of the webhook
    * @retruns boolean
    */
-  public async removeWebhook(simpleListener: SimpleListener){
-    if(this?._registeredWebhooks[simpleListener]) {
-      delete this._registeredWebhooks[simpleListener];
+  public async removeWebhook(webhookId: string){
+    if(this._registeredWebhooks[webhookId]) {
+      delete this._registeredWebhooks[webhookId];
       return true; //`Webhook for ${simpleListener} removed`
     }
     return false; //`Webhook for ${simpleListener} not found`
+  }
+
+  /**
+   * Update registered events for a specific webhook. This will override all existing events. If you'd like to remove all listeners from a webhook, consider using [[removeWebhook]].
+   * 
+   * In order to update authentication details for a webhook, remove it completely and then reregister it with the correct credentials.
+   */
+  public async updateWebhook(webhookId: string, events: SimpleListener[] | 'all') : Promise<Webhook | false> {
+    if(events==="all") events = Object.keys(SimpleListener).map(eventKey =>SimpleListener[eventKey])
+    if(!Array.isArray(events)) events = [events]
+    const validListeners = await this._setupWebhooksOnListeners(events)
+    if(this._registeredWebhooks[webhookId]) {
+      this._registeredWebhooks[webhookId].events = validListeners
+      const {
+        requestConfig,
+        ...rest
+      } = this._registeredWebhooks[webhookId] as Webhook;
+      return rest;
+    }
+    return false
   }
   
   /**
@@ -3154,28 +3226,95 @@ public async getStatus(contactId: ContactId) {
    * @param requestConfig {} By default the request is a post request, however you can override that and many other options by sending this parameter. You can read more about this parameter here: https://github.com/axios/axios#request-config
    * @param concurrency the amount of concurrent requests to be handled by the built in queue. Default is 5.
    */
-  public async registerWebhook(event: SimpleListener, url: string, requestConfig: AxiosRequestConfig = {}, concurrency: number = 5) {
-    if(!this._webhookQueue) this._webhookQueue = new PQueue({ concurrency });
-    if(this[event]){
-      if(!this._registeredWebhooks) this._registeredWebhooks={};
-      if(this._registeredWebhooks[event]) {
-        console.log('webhook already registered');
-        return false;
+  // public async registerWebhook(event: SimpleListener, url: string, requestConfig: AxiosRequestConfig = {}, concurrency: number = 5) {
+  //   if(!this._webhookQueue) this._webhookQueue = new PQueue({ concurrency });
+  //   if(this[event]){
+  //     if(!this._registeredWebhooks) this._registeredWebhooks={};
+  //     if(this._registeredWebhooks[event]) {
+  //       console.log('webhook already registered');
+  //       return false;
+  //     }
+  //     this._registeredWebhooks[event] = this[event](async _data=>await this._webhookQueue.add(async () => await axios({
+  //       method: 'post',
+  //       url,
+  //       data: {
+  //       ts: Date.now(),
+  //       event,
+  //       data:_data
+  //       },
+  //       ...requestConfig
+  //     })));
+  //     return this._registeredWebhooks[event];
+  //   }
+  //   console.log('Invalid lisetner', event);
+  //   return false;
+  // }
+
+
+  private async _setupWebhooksOnListeners(events: SimpleListener[] | 'all'){
+    if(events==="all") events = Object.keys(SimpleListener).map(eventKey =>SimpleListener[eventKey])
+    if(!Array.isArray(events)) events = [events]
+    if(!this._registeredWebhookListeners) this._registeredWebhookListeners={};
+    if(!this._registeredWebhooks) this._registeredWebhooks={};
+    let validListeners = [];
+      events.map(event=>{
+      if(this[event]){
+        validListeners.push(event);
+        if(this._registeredWebhookListeners[event] === undefined){
+          //set it up
+          this._registeredWebhookListeners[event] = this[event](async _data=>await this._webhookQueue.add(async () => await Promise.all([
+            ...Object.keys(this._registeredWebhooks).map(webhookId=>this._registeredWebhooks[webhookId]).filter(webhookEntry=>webhookEntry.events.includes(event))
+          ].map(({
+            id,
+            url,
+            requestConfig}) => axios({
+            method: 'post',
+            url,
+            data: this.prepEventData(_data,event as SimpleListener,{webhook_id:id}),
+            ...requestConfig
+          })))));
+        }        
       }
-      this._registeredWebhooks[event] = this[event](async _data=>await this._webhookQueue.add(async () => await axios({
-        method: 'post',
-        url,
-        data: {
+      })
+      return validListeners;
+  }
+  /**
+   * The client can now automatically handle webhooks. Use this method to register webhooks.
+   * 
+   * @param url The webhook url
+   * @param events An array of [[SimpleListener]] enums or `all` (to register all possible listeners)
+   * @param requestConfig {} By default the request is a post request, however you can override that and many other options by sending this parameter. You can read more about this parameter here: https://github.com/axios/axios#request-config
+   * @param concurrency the amount of concurrent requests to be handled by the built in queue. Default is 5.
+   * @returns A webhook object. This will include a webhook ID and an array of all successfully registered Listeners.
+   */
+  public async registerWebhook(url: string, events : SimpleListener[] | 'all', requestConfig: AxiosRequestConfig = {}, concurrency: number = 5) : Promise<Webhook | false> {
+    if(!this._webhookQueue) this._webhookQueue = new PQueue({ concurrency });
+    let validListeners = await this._setupWebhooksOnListeners(events)
+    const id = uuidv4()
+    if(validListeners.length) {
+      this._registeredWebhooks[id] = {
+        id,
         ts: Date.now(),
-        event,
-        data:_data
-        },
-        ...requestConfig
-      })));
-      return this._registeredWebhooks[event];
+        url, 
+        events: validListeners,
+        requestConfig
+      }
+      return this._registeredWebhooks[id];
     }
-    console.log('Invalid lisetner', event);
+    console.log('Invalid listener(s)', events);
     return false;
+  }
+
+  private prepEventData(data: any, event: SimpleListener, extras ?: any){
+    const sessionId = this.getSessionId();
+    return {
+        ts: Date.now(),
+        sessionId,
+        id: uuidv4(),
+        event,
+        data,
+        ...extras
+    }
   }
 
   private async registerEv(simpleListener: SimpleListener) {
@@ -3186,12 +3325,7 @@ public async getStatus(contactId: ContactId) {
         return false;
       }
       const sessionId = this.getSessionId();
-      this._registeredEvListeners[simpleListener] = await this[simpleListener](data=>ev.emit(`${simpleListener}.${sessionId}`,{
-        ts: Date.now(),
-        sessionId,
-        event: simpleListener,
-        data
-      }));
+      this._registeredEvListeners[simpleListener] = await this[simpleListener](data=>ev.emit(`${simpleListener}.${sessionId}`,this.prepEventData(data,simpleListener)));
       return true;
     }
     console.log('Invalid lisetner', simpleListener);
