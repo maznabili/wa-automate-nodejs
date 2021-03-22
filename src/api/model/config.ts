@@ -1,6 +1,6 @@
 import { AxiosRequestConfig } from 'axios';
-import { SimpleListener } from '../..';
 import { Base64 } from "./aliases";
+import { SimpleListener } from './events';
 
 /**
  * The different types of qr code output.
@@ -399,7 +399,7 @@ export interface ConfigObject {
      */
     hostNotificationLang ?: NotificationLanguage;
     /**
-     * Setting this to true will block all assets from loading onto the page. This may result in some load time impreovements but also increases instability. 
+     * Setting this to true will block all assets from loading onto the page. This may result in some load time improvements but also increases instability. 
      * @default `false`
      */
     blockAssets ?: boolean;

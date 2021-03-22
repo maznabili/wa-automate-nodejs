@@ -1,6 +1,6 @@
 {
   "name": "@open-wa/wa-automate",
-  "version": "3.9.1",
+  "version": "3.9.13",
   "licenseCheckUrl": "https://openwa.dev/license-check",
   "brokenMethodReportUrl": "https://openwa.dev/report-bm",
   "patches": "https://raw.githack.com/open-wa/wa-automate-nodejs/master/patches.json",
@@ -95,7 +95,8 @@
     "typescript": "^4.2.0-beta"
   },
   "dependencies": {
-    "@open-wa/wa-decrypt": "^3.0.1",
+    "@discordjs/collection": "^0.1.6",
+    "@open-wa/wa-decrypt": "^3.1.0",
     "@types/sharp": "^0.27.1",
     "atob": "^2.1.2",
     "axios": "^0.21.0",
@@ -142,7 +143,7 @@
     "tcp-port-used": "^1.0.1",
     "terminal-link": "^2.1.1",
     "tree-kill": "^1.2.2",
-    "ts-json-schema-generator": "^0.88.0",
+    "ts-json-schema-generator": "^0.89.0",
     "ts-morph": "^9.1.0",
     "update-notifier": "^5.0.0",
     "uuid": "^8.3.2",

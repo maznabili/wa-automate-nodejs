@@ -53,15 +53,57 @@ export enum ERROR_NAME {
     /**
      * Unable to send text
      */
-    SENDTEXT_FAILURE = "SENDTEXT_FAILURE"
+    SENDTEXT_FAILURE = "SENDTEXT_FAILURE",
+    /**
+     * Label does not exist
+     */
+     INVALID_LABEL = 'INVALID_LABEL'
 }
 
 /**
  * A simple custom error class that takes the first parameter as the name using the [[ERROR_NAME]] enum
  */
 export class CustomError extends Error {
-  constructor(name:ERROR_NAME, ...params) {
-    super(...params)
+  constructor(name:ERROR_NAME, message?: string, ...params : any[]) {
+    super(...[
+      message,
+      ...params])
     this.name = name
+    this.message = message
+  }
+}
+
+/**
+ * Add Participants Status Code Enum
+ */
+export enum AddParticipantErrorStatusCode {
+  /**
+   * Participant could not be added to group because they are already in the group
+   */
+  ALREADY_IN_GROUP = 409,
+  /**
+   * Participant could not be added to group because their privacy settings do not allow you to add them.
+   */
+  PRIVACY_SETTINGS = 403,
+  /**
+   * Participant could not be added to group because they recently left.
+   */
+  RECENTLY_LEFT = 408,
+  /**
+   * Participant could not be added to group because the group is full
+   */
+  GROUP_FULL = 500
+}
+export class AddParticipantError extends Error {
+  data: {
+    [contactId : string] : number
+  };
+  constructor(message : string, data ?: {
+    [contactId: string] : number
+  }){
+    super();
+    this.name = "ADD_PARTICIPANTS_ERROR";
+    this.message = message;
+    this.data = data
   }
 }

@@ -6,9 +6,9 @@ import { default as axios, AxiosRequestConfig} from 'axios';
 import { ParticipantChangedEventModel } from './model/group-metadata';
 import { useragent, puppeteerConfig } from '../config/puppeteer.config'
 import { ConfigObject, STATE, LicenseType, Webhook } from './model';
-import { PageEvaluationTimeout, CustomError, ERROR_NAME  } from './model/errors';
+import { PageEvaluationTimeout, CustomError, ERROR_NAME, AddParticipantError  } from './model/errors';
 import PQueue from 'p-queue';
-import { ev } from '../controllers/events';
+import { ev, Spin } from '../controllers/events';
 import { v4 as uuidv4 } from 'uuid';
 /** @ignore */
 const parseFunction = require('parse-function'),
@@ -59,6 +59,10 @@ import { CustomProduct } from './model/product';
 import Crypto from 'crypto';
 import { tmpdir } from 'os';
 import { defaultProcessOptions, Mp4StickerConversionProcessOptions, StickerMetadata } from './model/media';
+import { getLicense, injectInitPatch, injectLicense, injectLivePatch } from '../controllers/initializer';
+import { SimpleListener } from './model/events';
+import { CollectorOptions } from '../structures/Collector';
+import { MessageCollector } from '../structures/MessageCollector';
 
 export enum namespace {
   Chat = 'Chat',
@@ -66,79 +70,6 @@ export enum namespace {
   Contact = 'Contact',
   GroupMetadata = 'GroupMetadata'
 }
-
-/**
- * An enum of all the "simple listeners". A simple listener is a listener that just takes one parameter which is the callback function to handle the event.
- */
-export enum SimpleListener {
-  /**
-   * Represents [[onMessage]]
-   */
-  Message = 'onMessage',
-  /**
-   * Represents [[onAnyMessage]]
-   */
-  AnyMessage = 'onAnyMessage',
-  /**
-   * Represents [[onMessageDeleted]]
-   */
-  MessageDeleted = 'onMessageDeleted',
-  /**
-   * Represents [[onAck]]
-   */
-  Ack = 'onAck',
-  /**
-   * Represents [[onAddedToGroup]]
-   */
-  AddedToGroup = 'onAddedToGroup',
-  /**
-   * Represents [[onBattery]]
-   */
-  Battery = 'onBattery',
-  /**
-   * Represents [[onChatOpened]]
-   */
-  ChatOpened = 'onChatOpened',
-  /**
-   * Represents [[onIncomingCall]]
-   */
-  IncomingCall = 'onIncomingCall',
-  /**
-   * Represents [[onGlobalParticipantsChanged]]
-   */
-  GlobalParticipantsChanged = 'onGlobalParticipantsChanged',
-  /**
-   * Represents [[onChatState]]
-   */
-  ChatState = 'onChatState',
-  // Next two require extra params so not available to use via webhook register
-  // LiveLocation = 'onLiveLocation',
-  // ParticipantsChanged = 'onParticipantsChanged',
-  /**
-   * Represents [[onPlugged]]
-   */
-  Plugged = 'onPlugged',
-  /**
-   * Represents [[onStateChanged]]
-   */
-  StateChanged = 'onStateChanged',
-  /**
-   * Requires licence
-   * Represents [[onStory]]
-   */
-  Story = 'onStory',
-  /**
-   * Requires licence
-   * Represents [[onRemovedFromGroup]]
-   */
-  RemovedFromGroup = 'onRemovedFromGroup',
-  /**
-   * Requires licence
-   * Represents [[onContactAdded]]
-   */
-  ContactAdded = 'onContactAdded',
-}
-
 
 /**
  * @internal
@@ -273,7 +204,7 @@ declare module WAPI {
   const setGroupIcon: (groupId: string, imgData: string) => Promise<boolean>;
   const getGroupAdmins: (groupId: string) => Promise<ContactId[]>;
   const removeParticipant: (groupId: string, contactId: string) => Promise<boolean | string>;
-  const addOrRemoveLabels: (label: string, id: string, type: string) => Promise<boolean>;
+  const addOrRemoveLabels: (label: string, chatId: string, type: string) => Promise<boolean>;
   const promoteParticipant: (groupId: string, contactId: string) => Promise<boolean | string>;
   const demoteParticipant: (groupId: string, contactId: string) => Promise<boolean | string>;
   const setGroupToAdminsOnly: (groupId: string, onlyAdmins: boolean) => Promise<boolean>;
@@ -307,7 +238,8 @@ declare module WAPI {
     quotedMsgId?: string,
     waitForId?: boolean,
     ptt?: boolean,
-    withoutPreview?: boolean
+    withoutPreview?: boolean,
+    hideTags?: boolean
   ) => Promise<string>;
   const sendMessageWithThumb: (
     thumb: string,
@@ -383,6 +315,7 @@ declare module WAPI {
   const archiveChat: (id: string, archive: boolean) => Promise<boolean>;
   const isConnected: () => Boolean;
   const loadEarlierMessages: (contactId: string) => Promise<Message []>;
+  const getChatsByLabel: (label: string) => Promise<Chat[] | string>;
   const loadAllEarlierMessages: (contactId: string) => any;
   const getUnreadMessages: (
     includeMe: boolean,
@@ -411,6 +344,7 @@ export class Client {
   private _listeners: any;
   private _page: Page;
   private _currentlyBeingKilled: boolean = false;
+  private _refreshing : boolean = false
   private _l: any;
   /**
    * This is used to track if a listener is already used via webhook. Before, webhooks used to be set once per listener. Now a listener can be set via multiple webhooks, or revoked from a specific webhook.
@@ -444,13 +378,13 @@ export class Client {
    * Run all tasks to set up client AFTER init is fully completed
    */
   async loaded() {
-    if(this._createConfig?.eventMode) {
-      await this.registerAllSimpleListenersOnEv();
-    }
-    this._sessionInfo.PHONE_VERSION = (await this.getMe()).phone.wa_version
-    this.logger().child({
-      PHONE_VERSION: this._sessionInfo.PHONE_VERSION
-    }).info()
+      if(this._createConfig?.eventMode) {
+        await this.registerAllSimpleListenersOnEv();
+      }
+      this._sessionInfo.PHONE_VERSION = (await this.getMe()).phone.wa_version
+      this.logger().child({
+        PHONE_VERSION: this._sessionInfo.PHONE_VERSION
+      }).info()
   }
 
   private async registerAllSimpleListenersOnEv(){
@@ -504,21 +438,39 @@ export class Client {
    * This will attempt to re register all listeners EXCEPT onLiveLocation and onParticipantChanged
    */
    public async refresh(){
-     console.log('Refreshing')
+  this._refreshing = true;
+     const spinner = new Spin(this._createConfig?.sessionId || 'session', 'REFRESH', this._createConfig?.disableSpins);
+     const { me } = await this.getMe();
+     /**
+      * preload license
+      */
+     const preloadlicense = this._createConfig?.licenseKey ? await getLicense(this._createConfig, me, this._sessionInfo, spinner) : false
+     spinner.info('Refreshing page')
+     const START_TIME = Date.now();
      await this._page.goto(puppeteerConfig.WAUrl);
-     await isAuthenticated(this._page);
-     await this._reInjectWapi();
-     if (this._createConfig?.licenseKey) {
-      const { me } = await this.getMe();
-      const { data } = await axios.post(pkg.licenseCheckUrl, { key: this._createConfig.licenseKey, number: me._serialized, ...this._sessionInfo });
-      if (data) {
-        await this._page.evaluate(data => eval(data), data);
-        console.log('License Valid');
-      } else console.log('Invalid license key');
-    }
-    await this._page.evaluate('Object.freeze(window.WAPI)');
-    await this._reRegisterListeners();
-    return true;
+     if(await isAuthenticated(this._page)) {
+       /**
+        * Reset all listeners
+        */
+        this._registeredEvListeners = {};
+        // this._listeners = {};
+      await this._reInjectWapi();
+      /**
+       * patch
+       */
+      await injectLivePatch(this._page, spinner)
+      if (this._createConfig?.licenseKey) await injectLicense(this._page,this._createConfig,me, this._sessionInfo, spinner, preloadlicense);
+      /**
+       * init patch
+       */
+     await injectInitPatch(this._page)
+     await this.loaded()
+     if(!this._createConfig?.eventMode) await this._reRegisterListeners();
+     spinner.succeed(`Session refreshed in ${(Date.now() - START_TIME)/1000}s`)
+     this._refreshing = false;
+     spinner.remove()
+     return true;
+     } else throw new Error("Session Logged Out. Cannot refresh. Please restart the process and scan the qr code.")
    }
 
   /**
@@ -596,7 +548,7 @@ export class Client {
       //@ts-ignore
       return window[funcName] ? WAPI[`${funcName}`](obj => window[funcName](obj)) : false
     },{funcName});
-    if(this._listeners[funcName]) {
+    if(this._listeners[funcName] && !this._refreshing) {
       // console.log('listener already set');
       return true
     }
@@ -651,13 +603,23 @@ export class Client {
    * [REQUIRES AN INSIDERS LICENSE-KEY](https://gum.co/open-wa?tier=Insiders%20Program)
    * 
    * Listens to when a message is deleted by a recipient or the host account
-
    * @event 
    * @param fn callback
    * @fires [[Message]]
    */
   public async onMessageDeleted(fn: (message: Message) => void) {
     return this.registerListener(SimpleListener.MessageDeleted, fn);
+  }
+
+
+  /**
+   * Listens to when a chat is deleted by the host account
+   * @event 
+   * @param fn callback
+   * @fires [[Chat]]
+   */
+  public async onChatDeleted(fn: (chat: Chat) => void) {
+    return this.registerListener(SimpleListener.ChatDeleted, fn);
   }
 
   /** 
@@ -864,7 +826,7 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
    */
   public async setPresence(available: boolean) {
     return await this.pup(
-      available => {WAPI.setPresence(available)},
+      available => WAPI.setPresence(available),
       available
       )
   }
@@ -875,7 +837,7 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
    */
   public async setMyStatus(newStatus: string) {
     return await this.pup(
-      ({newStatus}) => {WAPI.setMyStatus(newStatus)},
+      ({newStatus}) => WAPI.setMyStatus(newStatus),
       {newStatus}
       )
   }
@@ -885,10 +847,10 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
    * @param label: either the id or the name of the label. id will be something simple like anhy nnumber from 1-10, name is the label of the label if that makes sense.
    * @param id The Chat, message or contact id to which you want to add a label
    */
-  public async addLabel(label: string, id: string) {
+  public async addLabel(label: string, chatId: ChatId) {
     return await this.pup(
-      ({label, id}) => {WAPI.addOrRemoveLabels(label, id, 'add')},
-      {label, id}
+      ({label, chatId}) => WAPI.addOrRemoveLabels(label, chatId, 'add'),
+      {label, chatId}
       ) as Promise<boolean>;
   }
 
@@ -897,11 +859,27 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
    * @param label: either the id or the name of the label. id will be something simple like anhy nnumber from 1-10, name is the label of the label if that makes sense.
    * @param id The Chat, message or contact id to which you want to add a label
    */
-  public async removeLabel(label: string, id: string) {
+  public async removeLabel(label: string, chatId: ChatId) {
     return await this.pup(
-      ({label, id}) => {WAPI.addOrRemoveLabels(label, id, 'remove')},
-      {label, id}
+      ({label, chatId}) => WAPI.addOrRemoveLabels(label, chatId, 'remove'),
+      {label, chatId}
       ) as Promise<boolean>;
+  }
+
+  /**
+   * Get an array of chats that match the label parameter. For example, if you want to get an array of chat objects that have the label "New customer".
+   * 
+   * This method is case insenstive and only works on business host accounts.
+   * 
+   * @label The label name 
+   */
+  public async getChatsByLabel(label: string) : Promise<Chat[]> {
+    const res = await this.pup(
+      ({label}) => WAPI.getChatsByLabel(label),
+      {label}
+      )
+      if(typeof res == 'string') new CustomError(ERROR_NAME.INVALID_LABEL, res);
+      return res;
   }
 
 /**
@@ -915,7 +893,7 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
  */
   public async sendVCard(chatId: ChatId, vcard: string, contactName:string,  contactNumber?: string) {
     return await this.pup(
-      ({chatId, vcard, contactName, contactNumber}) => {WAPI.sendVCard(chatId, vcard,contactName, contactNumber)},
+      ({chatId, vcard, contactName, contactNumber}) => WAPI.sendVCard(chatId, vcard,contactName, contactNumber),
       {chatId, vcard, contactName, contactNumber}
       ) as Promise<boolean>;
   }
@@ -929,7 +907,7 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
    */
    public async setMyName(newName: string) {
      return await this.pup(
-       ({newName}) => {WAPI.setMyName(newName)},
+       ({newName}) => WAPI.setMyName(newName),
        {newName}
        ) as Promise<boolean>;
    }
@@ -941,7 +919,7 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
     */
    public async setChatState(chatState: ChatState, chatId: ChatId) {
     return await this.pup(
-      ({chatState, chatId}) => {WAPI.setChatState(chatState, chatId)},
+      ({chatState, chatId}) => WAPI.setChatState(chatState, chatId),
       //@ts-ignore
       {chatState, chatId}
       )
@@ -1224,6 +1202,7 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
    * @param filename string xxxxx
    * @param caption string xxxxx
    * @param waitForKey boolean default: false set this to true if you want to wait for the id of the message. By default this is set to false as it will take a few seconds to retrieve to the key of the message and this waiting may not be desirable for the majority of users.
+   * @param hideTags boolean default: false [INSIDERS] set this to try silent tag someone in the caption
    * @returns Promise <boolean | string> This will either return true or the id of the message. It will return true after 10 seconds even if waitForId is true
    */
   public async sendImage(
@@ -1234,7 +1213,8 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
     quotedMsgId?: MessageId,
     waitForId?: boolean,
     ptt?:boolean,
-    withoutPreview?:boolean
+    withoutPreview?:boolean,
+    hideTags ?: boolean
   ) {
       //check if the 'base64' file exists
       if(!isDataURL(file) && !isBase64(file)) {
@@ -1243,7 +1223,7 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
         if(fs.existsSync(file) || fs.existsSync(relativePath)) {
           file = await datauri(fs.existsSync(file)  ? file : relativePath);
         } else if(isUrl(file)){
-          return await this.sendFileFromUrl(to,file,filename,caption,quotedMsgId,{},waitForId,ptt,withoutPreview);
+          return await this.sendFileFromUrl(to,file,filename,caption,quotedMsgId,{},waitForId,ptt,withoutPreview, hideTags);
         } else throw new CustomError(ERROR_NAME.FILE_NOT_FOUND,'Cannot find file. Make sure the file reference is relative, a valid URL or a valid DataURL')
       }
     
@@ -1255,8 +1235,8 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
    ];
 
     let res = await this.pup(
-      ({ to, file, filename, caption, quotedMsgId, waitForId, ptt, withoutPreview}) =>  WAPI.sendImage(file, to, filename, caption, quotedMsgId, waitForId, ptt, withoutPreview),
-      { to, file, filename, caption, quotedMsgId, waitForId, ptt, withoutPreview}
+      ({ to, file, filename, caption, quotedMsgId, waitForId, ptt, withoutPreview, hideTags}) =>  WAPI.sendImage(file, to, filename, caption, quotedMsgId, waitForId, ptt, withoutPreview, hideTags),
+      { to, file, filename, caption, quotedMsgId, waitForId, ptt, withoutPreview, hideTags}
     )
     if(err.includes(res)) console.error(res);
     return (err.includes(res) ? false : res)  as MessageId | boolean;
@@ -1301,14 +1281,14 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
    * @param content string reply text
    * @param quotedMsgId string the msg id to reply to.
    * @param sendSeen boolean If set to true, the chat will 'blue tick' all messages before sending the reply
-   * @returns Promise<string | boolean> false if didn't work, otherwise returns message id.
+   * @returns Promise<MessageId | false> false if didn't work, otherwise returns message id.
    */
   public async reply(to: ChatId, content: Content, quotedMsgId: MessageId, sendSeen?: boolean) {
     if(sendSeen) await this.sendSeen(to);
     return await this.pup(
       ({ to, content, quotedMsgId }) =>WAPI.reply(to, content, quotedMsgId),
       { to, content, quotedMsgId }
-    ) as Promise<string | boolean>;
+    ) as Promise<MessageId | false>;
   }
 
   /**
@@ -1339,7 +1319,8 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
    * @param waitForId boolean default: false set this to true if you want to wait for the id of the message. By default this is set to false as it will take a few seconds to retrieve to the key of the message and this waiting may not be desirable for the majority of users.
    * @param ptt boolean default: false set this to true if you want to send the file as a push to talk file.
    * @param withoutPreview boolean default: false set this to true if you want to send the file without a preview (i.e as a file). This is useful for preventing auto downloads on recipient devices.
-   * @returns Promise <boolean | string> This will either return true or the id of the message. It will return true after 10 seconds even if waitForId is true
+   * @param hideTags boolean default: false [INSIDERS] set this to try silent tag someone in the caption
+   * @returns Promise <boolean | MessageId> This will either return true or the id of the message. It will return true after 10 seconds even if waitForId is true
    */
   public async sendFile(
     to: ChatId,
@@ -1349,9 +1330,10 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
     quotedMsgId?: MessageId,
     waitForId?: boolean,
     ptt?:boolean,
-    withoutPreview?:boolean
+    withoutPreview?:boolean,
+    hideTags ?: boolean
   ) {
-    return this.sendImage(to, file, filename, caption, quotedMsgId, waitForId, ptt, withoutPreview);
+    return this.sendImage(to, file, filename, caption, quotedMsgId, waitForId, ptt, withoutPreview, hideTags);
   }
 
   /**
@@ -1486,11 +1468,12 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
     requestConfig: AxiosRequestConfig = {},
     waitForId?: boolean,
     ptt?:boolean,
-    withoutPreview?:boolean
+    withoutPreview?:boolean,
+    hideTags ?: boolean
   ) {
     try {
      const base64 = await getDUrl(url, requestConfig);
-      return await this.sendFile(to,base64,filename,caption,quotedMsgId,waitForId,ptt,withoutPreview)
+      return await this.sendFile(to,base64,filename,caption,quotedMsgId,waitForId,ptt,withoutPreview, hideTags)
     } catch(error) {
       console.log('Something went wrong', error);
       throw error;
@@ -2457,11 +2440,14 @@ public async getStatus(contactId: ContactId) {
   * 
   */
 
-  public async addParticipant(groupId: GroupChatId, participantId: ContactId) {
-    return await this.pup(
+  public async addParticipant(groupId: GroupChatId, participantId: ContactId | ContactId[]) {
+    const res = await this.pup(
       ({ groupId, participantId }) => WAPI.addParticipant(groupId, participantId),
       { groupId, participantId }
     );
+    if (typeof res === "object") throw new AddParticipantError('Unable to add some participants', res)
+    if (typeof res === "string") throw new AddParticipantError(res)
+    return res;
   }
 
   /**
@@ -2710,6 +2696,8 @@ public async getStatus(contactId: ContactId) {
   private async stickerServerRequest(func: string, a : any = {}, fallback : boolean = false){
     if(!this._createConfig.stickerServerEndpoint) return false;
     if(func === 'convertMp4BufferToWebpDataUrl') fallback = true;
+    const sessionInfo = this.getSessionInfo()
+    sessionInfo.WA_AUTOMATE_VERSION = sessionInfo.WA_AUTOMATE_VERSION.split(' ')[0]
     if(a.file || a.image) {
       //check if its a local file:
       const key = a.file ? 'file' : 'image';
@@ -2724,13 +2712,13 @@ public async getStatus(contactId: ContactId) {
       }
       if(a?.stickerMetadata && typeof a?.stickerMetadata !== "object") throw new CustomError(ERROR_NAME.BAD_STICKER_METADATA, `Received ${typeof a?.stickerMetadata}: ${a?.stickerMetadata}`);
       try {
-        const {data} = await axios.post(`${(fallback ?  pkg.stickerUrl : 'https://open-wa-sticker-api.herokuapp.com'  )|| this._createConfig.stickerServerEndpoint}/${func}`, {
+        const {data} = await axios.post(`${((fallback ?  pkg.stickerUrl : 'https://open-wa-sticker-api.herokuapp.com')|| this._createConfig.stickerServerEndpoint).replace(/\/$/, '')}/${func}`, {
           ...a,
-        sessionInfo: this.getSessionInfo(),
+        sessionInfo,
         config: this.getConfig()
       },{
-        maxBodyLength: 20000000,
-        maxContentLength: 1500000
+        maxBodyLength: 20000000, // 20mb request file limit
+        maxContentLength: 1500000 // 1.5mb response body limit
       });
         return data;
       } catch (err) {
@@ -2828,8 +2816,9 @@ public async getStatus(contactId: ContactId) {
    * 
    * @param to ChatId The chat id you want to send the webp sticker to
    * @param file [[DataURL]], [[Base64]], URL (string GET), Relative filepath (string), or Buffer of the mp4 file
+   * @param messageId message id of the message you want this sticker to reply to. [REQUIRES AN INSIDERS LICENSE-KEY](https://gum.co/open-wa?tier=Insiders%20Program)
    */
-  public async sendMp4AsSticker(to: ChatId, file: DataURL | Buffer | Base64 | string, processOptions: Mp4StickerConversionProcessOptions = defaultProcessOptions, stickerMetadata?: StickerMetadata) {
+  public async sendMp4AsSticker(to: ChatId, file: DataURL | Buffer | Base64 | string, processOptions: Mp4StickerConversionProcessOptions = defaultProcessOptions, stickerMetadata?: StickerMetadata, messageId ?: MessageId) {
     //@ts-ignore
     if((Buffer.isBuffer(file)  || typeof file === 'object' || file?.type === 'Buffer') && file.toString) {
       file = file.toString('base64')
@@ -2857,7 +2846,7 @@ public async getStatus(contactId: ContactId) {
       } else convertedStickerDataUrl = await convertMp4BufferToWebpDataUrl(file, processOptions);
     try {
       if(!convertedStickerDataUrl) return false;
-      return await this.sendRawWebpAsSticker(to, convertedStickerDataUrl, true);
+      return await (messageId && this._createConfig.licenseKey) ? this.sendRawWebpAsStickerAsReply(to, messageId, convertedStickerDataUrl, true) : this.sendRawWebpAsSticker(to, convertedStickerDataUrl, true);
     } catch (error) {
       const msg = 'Stickers have to be less than 1MB. Please lower the fps or shorten the duration using the processOptions parameter: https://open-wa.github.io/wa-automate-nodejs/classes/client.html#sendmp4assticker'
       console.log(msg)
@@ -2866,7 +2855,6 @@ public async getStatus(contactId: ContactId) {
   }
 
   /**
-   * [WIP]
    * You can use this to send a raw webp file.
    * @param to ChatId The chat id you want to send the webp sticker to
    * @param webpBase64 Base64 The base64 string of the webp file. Not DataURl
@@ -2883,6 +2871,29 @@ public async getStatus(contactId: ContactId) {
     return await this.pup(
       ({ webpBase64,to, metadata }) => WAPI.sendImageAsSticker(webpBase64,to, metadata),
       { webpBase64,to, metadata }
+    );
+  }
+
+  /**
+   * [REQUIRES AN INSIDERS LICENSE-KEY](https://gum.co/open-wa?tier=Insiders%20Program)
+   * 
+   * You can use this to send a raw webp file.
+   * @param to ChatId The chat id you want to send the webp sticker to
+   * @param messageId MessageId Message ID of the message to reply to
+   * @param webpBase64 Base64 The base64 string of the webp file. Not DataURl
+   * @param animated Boolean Set to true if the webp is animated. Default `false`
+   */
+  public async sendRawWebpAsStickerAsReply(to: ChatId, messageId: MessageId, webpBase64: Base64, animated : boolean = false, ){
+    let metadata =  {
+        format: 'webp',
+        width: 512,
+        height: 512,
+        animated,
+    }
+    webpBase64 = webpBase64.replace(/^data:image\/(png|gif|jpeg|webp);base64,/,'');
+    return await this.pup(
+      ({ webpBase64,to, metadata, messageId }) => WAPI.sendStickerAsReply(webpBase64,to, metadata, messageId),
+      { webpBase64,to, metadata, messageId }
     );
   }
 
@@ -3159,10 +3170,14 @@ public async getStatus(contactId: ContactId) {
           response
         })
         } catch (error) {
-        console.log("middleware -> error", error)
+        console.error("middleware -> error", error)
         return res.send({
           success:false,
-          error
+          error : {
+            name: error.name,
+            message: error.message,
+            data: error.data
+          }
         })
         }
       }
@@ -3332,6 +3347,17 @@ public async getStatus(contactId: ContactId) {
     return false;
   }
   
+
+  /**
+   * Returns a new message collector for the chat which is related to the first parameter c
+   * @param c The Mesasge/Chat or Chat Id to base this message colletor on
+   * @param filter A function that consumes a [Message] and returns a boolean which determines whether or not the message shall be collected.
+   * @param options The options for the collector. For example, how long the collector shall run for, how many messages it should collect, how long between messages before timing out, etc.
+   */
+   createMessageCollector(c : Message | ChatId | Chat, filter : (args: any[] | any ) => boolean | Promise<boolean>, options : CollectorOptions) : MessageCollector {
+    const chatId : ChatId = ((c as Message)?.chat?.id || (c as Chat)?.id || c) as ChatId;
+    return new MessageCollector(this.getSessionId(), chatId, filter, options);
+   }
 }
 
 export { useragent } from '../config/puppeteer.config'
