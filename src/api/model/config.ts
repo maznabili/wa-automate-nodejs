@@ -470,7 +470,7 @@ export interface ConfigObject {
      * 
      * This is useful because you can register/deregister the event listener as needed whereas the legacy method of setting callbacks are only be set once
      * 
-     * @default false;
+     * @default `true`;
      */
     eventMode ?: boolean;
     /**
@@ -502,6 +502,30 @@ export interface ConfigObject {
      * @default `false`
      */
     cachedPatch ?: boolean;
+    /**
+     * Setting `this` to true will replace the `console.table` with a stringified logging of the debug info object instead. This would be useful to set for smaller terminal windows. If `disableSpins` is `true` then this will also be `true`.
+     * @default `false`
+     */
+    logDebugInfoAsObject ?: boolean;
+    /**
+     * Kill the client when a logout is detected
+     * @default `false`
+     */
+    killClientOnLogout ?: boolean;
+    /**
+     * This will make the `create` command return `false` if the detected session data is expired.
+     * 
+     * This will mean, the process will not attempt to automatically get a new QR code.
+     * 
+     * @default `false`
+     */
+    throwOnExpiredSessionData ?: boolean;
+    /**
+     * Some sessions may experience issues with sending media when using proxies. Using the native proxy system instead of the recommended 3rd party library may fix these issues.
+     * 
+     * @default `false`
+     */
+     useNativeProxy ?: boolean;
     /**@internal */
     [x: string]: any 
 }

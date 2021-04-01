@@ -12,11 +12,14 @@ import { ConfigObject } from '../api/model';
 const ON_DEATH = require('death'); //this is intentionally ugly
 let browser;
 
-export async function initPage(sessionId?: string, config?:ConfigObject, customUserAgent?:string) : Promise<Page> {
+export async function initPage(sessionId?: string, config?:ConfigObject, customUserAgent?:string, spinner ?: Spin) : Promise<Page> {
   const setupPromises = [];
   if(config?.useStealth) puppeteer.use(require('puppeteer-extra-plugin-stealth')());
+  spinner?.info('Launching Browser')
   browser = await initBrowser(sessionId,config);
+  
   const waPage = await getWAPage(browser);
+  spinner?.info('Setting Up Browser')
   if (config?.proxyServerCredentials) {
     await waPage.authenticate(config.proxyServerCredentials);
   }
@@ -52,7 +55,6 @@ export async function initPage(sessionId?: string, config?:ConfigObject, customU
     .replace('://', '')}` : config.proxyServerCredentials.address}` : false;
   let quickAuthed = false;
   if(interceptAuthentication || proxyAddr || blockCrashLogs){
-    setupPromises.push(async ()=>{
       await waPage.setRequestInterception(true);  
       const authCompleteEv = new EvEmitter(sessionId, 'AUTH');
       waPage.on('request', async request => {
@@ -68,34 +70,42 @@ export async function initPage(sessionId?: string, config?:ConfigObject, customU
       if (request.url().includes('https://crashlogs.whatsapp.net/') && blockCrashLogs){
         request.abort();
       }
-      else if (proxyAddr) require('puppeteer-page-proxy')(request, proxyAddr);
+      else if (proxyAddr && !config?.useNativeProxy) require('puppeteer-page-proxy')(request, proxyAddr);
       else request.continue();
       })
-    })
+    
   }
 
-  const sessionjson = getSessionDataFromFile(sessionId, config)
-  if(sessionjson) await waPage.evaluateOnNewDocument(
-    session => {
+  spinner?.info('Loading session data')
+  const sessionjson = getSessionDataFromFile(sessionId, config, spinner)
+  if(sessionjson) {
+  spinner?.info('Existing session data detected. Injecting...')
+    await waPage.evaluateOnNewDocument(
+  session => {
         localStorage.clear();
         Object.keys(session).forEach(key=>localStorage.setItem(key,session[key]));
     }, sessionjson);
-    if(config?.proxyServerCredentials) {
+    spinner?.succeed('Existing session data injected')
+  }
+    if(config?.proxyServerCredentials && !config?.useNativeProxy) {
       await require('puppeteer-page-proxy')(waPage, proxyAddr);
-      console.log(`Active proxy: ${config.proxyServerCredentials.address}`)
     }
+  if(config?.proxyServerCredentials?.address) spinner.succeed(`Active proxy: ${config.proxyServerCredentials.address}`)
   await Promise.all(setupPromises);
+  spinner?.info('Navigating to WA')
   await waPage.goto(puppeteerConfig.WAUrl)
   return waPage;
 }
 
-const getSessionDataFromFile = (sessionId: string, config: ConfigObject) => {
+const getSessionDataFromFile = (sessionId: string, config: ConfigObject, spinner ?: Spin) => {
+  if(config?.sessionData == "NUKE") return '' 
   //check if [session].json exists in __dirname
-  const sessionjsonpath = (config?.sessionDataPath && config?.sessionDataPath.includes('.data.json')) ? path.join(path.resolve(process.cwd(),config?.sessionDataPath || '')) : path.join(path.resolve(process.cwd(),config?.sessionDataPath || ''), `${sessionId || 'session'}.data.json`);
+  const sessionjsonpath = getSessionDataFilePath(sessionId,config)
   let sessionjson = '';
   const sd = process.env[`${sessionId.toUpperCase()}_DATA_JSON`] ? JSON.parse(process.env[`${sessionId.toUpperCase()}_DATA_JSON`]) : config?.sessionData;
   sessionjson = (typeof sd === 'string') ? JSON.parse(Buffer.from(sd, 'base64').toString('ascii')) : sd;
-  if (fs.existsSync(sessionjsonpath)) {
+  if (sessionjsonpath && fs.existsSync(sessionjsonpath)) {
+    spinner.succeed(`Found session data file: ${sessionjsonpath}`)
     const s = fs.readFileSync(sessionjsonpath, "utf8");
     try {
       sessionjson = JSON.parse(s);
@@ -103,26 +113,39 @@ const getSessionDataFromFile = (sessionId: string, config: ConfigObject) => {
       try {
       sessionjson = JSON.parse(Buffer.from(s, 'base64').toString('ascii'));
       } catch (error) {
-      console.error("session data json file is corrupted. Please reauthenticate.");
+        const msg = "Session data json file is corrupted. Please reauthenticate."
+      if(spinner) {
+        spinner.fail(msg)
+      } else console.error(msg);
       return false;
       }
     }
   } else {
-    const p = require?.main?.path || process?.mainModule?.path;
-    if(p) {
-      const altSessionJsonPath = (config?.sessionDataPath && config?.sessionDataPath.includes('.data.json')) ? path.join(path.resolve(p,config?.sessionDataPath || '')) : path.join(path.resolve(p,config?.sessionDataPath || ''), `${sessionId || 'session'}.data.json`);
-      if(fs.existsSync(altSessionJsonPath)) {
-        const s = fs.readFileSync(altSessionJsonPath, "utf8");
-        try {
-          sessionjson = JSON.parse(s);
-        } catch (error) {
-          sessionjson = JSON.parse(Buffer.from(s, 'base64').toString('ascii'));
-        }
-      }
-    }
+    spinner.succeed(`No session data file found for session : ${sessionId}`)
   }
   return sessionjson;
-} 
+}
+
+export const deleteSessionData = (config: ConfigObject) : boolean => {
+  const sessionjsonpath = getSessionDataFilePath(config?.sessionId || 'session', config)
+  if(fs.existsSync(sessionjsonpath)) {
+    console.log("logout detected, deleting session data")
+    fs.unlinkSync(sessionjsonpath);
+  }
+  return true;
+}
+
+export const getSessionDataFilePath = (sessionId: string, config: ConfigObject) : string | boolean => {
+  const p = require?.main?.path || process?.mainModule?.path;
+  const sessionjsonpath = (config?.sessionDataPath && config?.sessionDataPath.includes('.data.json')) ? path.join(path.resolve(process.cwd(),config?.sessionDataPath || '')) : path.join(path.resolve(process.cwd(),config?.sessionDataPath || ''), `${sessionId || 'session'}.data.json`);
+  const altSessionJsonPath = p ? (config?.sessionDataPath && config?.sessionDataPath.includes('.data.json')) ? path.join(path.resolve(p,config?.sessionDataPath || '')) : path.join(path.resolve(p,config?.sessionDataPath || ''), `${sessionId || 'session'}.data.json`) : false;
+  if(fs.existsSync(sessionjsonpath)){
+    return sessionjsonpath
+  } else if(p && altSessionJsonPath && fs.existsSync(altSessionJsonPath)){
+    return altSessionJsonPath
+  }
+  return false
+}
 
 export const addScript = (page: Page, js : string) : Promise<unknown> => page.addScriptTag({
   path: require.resolve(path.join(__dirname, '../lib', js))
@@ -172,7 +195,7 @@ async function initBrowser(sessionId?: string, config:any={}) {
     }
   }
   
-  // if(config?.proxyServerCredentials?.address) puppeteerConfig.chromiumArgs.push(`--proxy-server=${config.proxyServerCredentials.address}`)
+  if(config?.proxyServerCredentials?.address && config?.useNativeProxy) puppeteerConfig.chromiumArgs.push(`--proxy-server=${config.proxyServerCredentials.address}`)
   if(config?.browserWsEndpoint) config.browserWSEndpoint = config.browserWsEndpoint;
   const args = [...puppeteerConfig.chromiumArgs,...(config?.chromiumArgs||[])];
   if(config?.corsFix) args.push('--disable-web-security');

@@ -1,9 +1,9 @@
 import * as qrcode from 'qrcode-terminal';
 import { from, Observable, race } from 'rxjs';
-import {EvEmitter} from './events'
+import {EvEmitter, Spin} from './events'
 import { screenshot } from './initializer'
 import { ConfigObject } from '../api/model';
-import { Page, JSHandle} from 'puppeteer';
+import { Page } from 'puppeteer';
 const timeout = ms =>  new Promise(resolve => setTimeout(resolve, ms, 'timeout'));
 
 /**
@@ -11,7 +11,7 @@ const timeout = ms =>  new Promise(resolve => setTimeout(resolve, ms, 'timeout')
  * @returns true if is authenticated, false otherwise
  * @param waPage
  */
-export const isAuthenticated = (waPage: Page) : Promise<unknown> => race(needsToScan(waPage), isInsideChat(waPage)).toPromise();
+export const isAuthenticated = (waPage: Page) : Promise<unknown> => race(needsToScan(waPage), isInsideChat(waPage), sessionDataInvalid(waPage)).toPromise();
 
 export const needsToScan = (waPage: Page) : Observable<unknown> => {
   return from(new Promise(async resolve  => {
@@ -42,15 +42,27 @@ export const isInsideChat = (waPage: Page) : Observable<boolean> => {
   );
 };
 
-export const phoneIsOutOfReach = async (waPage: Page) : Promise<JSHandle>  => {
+export const sessionDataInvalid = async (waPage: Page) : Promise<string> => {
+  await waPage
+    .waitForFunction(
+      '!window.getQrPng',
+      { timeout: 0, polling: 'mutation' }
+    )
+    //if the code reaches here it means the browser was refreshed. Nuke the session data and restart `create`
+    return 'NUKE';
+}
+
+export const phoneIsOutOfReach = async (waPage: Page) : Promise<boolean>  => {
   return await waPage
     .waitForFunction(
       'document.querySelector("body").innerText.includes("Trying to reach phone")',
       { timeout: 0, polling: 'mutation' }
-    );
+    )
+    .then(()=>true)
+    .catch(()=>false);
 } ;
 
-export async function smartQr(waPage: Page, config?: ConfigObject) : Promise<boolean | void>{
+export async function smartQr(waPage: Page, config?: ConfigObject, spinner ?: Spin) : Promise<boolean | void>{
     const evalResult = await waPage.evaluate("window.Store && window.Store.State")
     if (evalResult === false) {
       console.log('Seems as though you have been TOS_BLOCKed, unable to refresh QR Code. Please see https://github.com/open-wa/wa-automate-nodejs#best-practice for information on how to prevent this from happeing. You will most likely not get a QR Code');
@@ -76,7 +88,10 @@ export async function smartQr(waPage: Page, config?: ConfigObject) : Promise<boo
   return new Promise(async resolve => {
     const funcName = '_smartQr';
     const fn = async (qrData) => {
-      if(qrData==='QR_CODE_SUCCESS') return resolve(await isInsideChat(waPage).toPromise())
+      if(qrData==='QR_CODE_SUCCESS') {
+        spinner?.succeed("QR code scanned. Loading session...")
+        return resolve(await isInsideChat(waPage).toPromise())
+      }
       grabAndEmit(qrData)
     }
     const set = () => waPage.evaluate(({funcName}) => {
