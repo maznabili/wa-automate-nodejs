@@ -3,7 +3,7 @@
 <head>
 	<meta charset="utf-8">
 	<meta http-equiv="X-UA-Compatible" content="IE=edge">
-	<title>Webhook | @open-wa/wa-automate - v3.10.12</title>
+	<title>HealthCheck | @open-wa/wa-automate - v3.10.12</title>
 	<meta name="description" content="Documentation for @open-wa/wa-automate - v3.10.12">
 	<meta name="viewport" content="width=device-width, initial-scale=1">
 	<link rel="stylesheet" href="../assets/css/main.css">
@@ -65,13 +65,13 @@
 					<a href="../modules.html">Globals</a>
 				</li>
 				<li>
-					<a href="../modules/api_model_config.html">api/model/config</a>
+					<a href="../modules/api_model_sessioninfo.html">api/model/sessionInfo</a>
 				</li>
 				<li>
-					<a href="api_model_config.webhook.html">Webhook</a>
+					<a href="api_model_sessioninfo.healthcheck.html">HealthCheck</a>
 				</li>
 			</ul>
-			<h1>Interface Webhook</h1>
+			<h1>Interface HealthCheck</h1>
 		</div>
 	</div>
 </header>
@@ -82,7 +82,7 @@
 				<h3>Hierarchy</h3>
 				<ul class="tsd-hierarchy">
 					<li>
-						<span class="target">Webhook</span>
+						<span class="target">HealthCheck</span>
 					</li>
 				</ul>
 			</section>
@@ -93,11 +93,14 @@
 						<section class="tsd-index-section ">
 							<h3>Properties</h3>
 							<ul class="tsd-index-list">
-								<li class="tsd-kind-property tsd-parent-kind-interface"><a href="api_model_config.webhook.html#events" class="tsd-kind-icon">events</a></li>
-								<li class="tsd-kind-property tsd-parent-kind-interface"><a href="api_model_config.webhook.html#id" class="tsd-kind-icon">id</a></li>
-								<li class="tsd-kind-property tsd-parent-kind-interface"><a href="api_model_config.webhook.html#requestconfig" class="tsd-kind-icon">request<wbr>Config</a></li>
-								<li class="tsd-kind-property tsd-parent-kind-interface"><a href="api_model_config.webhook.html#ts" class="tsd-kind-icon">ts</a></li>
-								<li class="tsd-kind-property tsd-parent-kind-interface"><a href="api_model_config.webhook.html#url" class="tsd-kind-icon">url</a></li>
+								<li class="tsd-kind-property tsd-parent-kind-interface"><a href="api_model_sessioninfo.healthcheck.html#ishere" class="tsd-kind-icon">is<wbr>Here</a></li>
+								<li class="tsd-kind-property tsd-parent-kind-interface"><a href="api_model_sessioninfo.healthcheck.html#isphonedisconnected" class="tsd-kind-icon">is<wbr>Phone<wbr>Disconnected</a></li>
+								<li class="tsd-kind-property tsd-parent-kind-interface"><a href="api_model_sessioninfo.healthcheck.html#online" class="tsd-kind-icon">online</a></li>
+								<li class="tsd-kind-property tsd-parent-kind-interface"><a href="api_model_sessioninfo.healthcheck.html#queuedmessages" class="tsd-kind-icon">queued<wbr>Messages</a></li>
+								<li class="tsd-kind-property tsd-parent-kind-interface"><a href="api_model_sessioninfo.healthcheck.html#retryingin" class="tsd-kind-icon">retrying<wbr>In</a></li>
+								<li class="tsd-kind-property tsd-parent-kind-interface"><a href="api_model_sessioninfo.healthcheck.html#state" class="tsd-kind-icon">state</a></li>
+								<li class="tsd-kind-property tsd-parent-kind-interface"><a href="api_model_sessioninfo.healthcheck.html#tryingtoreachphone" class="tsd-kind-icon">trying<wbr>ToReach<wbr>Phone</a></li>
+								<li class="tsd-kind-property tsd-parent-kind-interface"><a href="api_model_sessioninfo.healthcheck.html#wapiinjected" class="tsd-kind-icon">wapi<wbr>Injected</a></li>
 							</ul>
 						</section>
 					</div>
@@ -106,72 +109,107 @@
 			<section class="tsd-panel-group tsd-member-group ">
 				<h2>Properties</h2>
 				<section class="tsd-panel tsd-member tsd-kind-property tsd-parent-kind-interface">
-					<a name="events" class="tsd-anchor"></a>
-					<h3>events</h3>
-					<div class="tsd-signature tsd-kind-icon">events<span class="tsd-signature-symbol">:</span> <a href="../enums/api_model_events.simplelistener.html" class="tsd-signature-type" data-tsd-kind="Enumeration">SimpleListener</a><span class="tsd-signature-symbol">[]</span></div>
+					<a name="ishere" class="tsd-anchor"></a>
+					<h3><span class="tsd-flag ts-flagOptional">Optional</span> is<wbr>Here</h3>
+					<div class="tsd-signature tsd-kind-icon">is<wbr>Here<span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span></div>
 					<aside class="tsd-sources">
 					</aside>
 					<div class="tsd-comment tsd-typography">
 						<div class="lead">
-							<p>An array of events that are registered to be sent to this webhook.</p>
+							<p>Returns <code>true</code> if &quot;Use Here&quot; button is not detected</p>
 						</div>
+						<p>Healthy: <code>true</code></p>
 					</div>
 				</section>
 				<section class="tsd-panel tsd-member tsd-kind-property tsd-parent-kind-interface">
-					<a name="id" class="tsd-anchor"></a>
-					<h3>id</h3>
-					<div class="tsd-signature tsd-kind-icon">id<span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span></div>
+					<a name="isphonedisconnected" class="tsd-anchor"></a>
+					<h3><span class="tsd-flag ts-flagOptional">Optional</span> is<wbr>Phone<wbr>Disconnected</h3>
+					<div class="tsd-signature tsd-kind-icon">is<wbr>Phone<wbr>Disconnected<span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span></div>
 					<aside class="tsd-sources">
 					</aside>
 					<div class="tsd-comment tsd-typography">
 						<div class="lead">
-							<p>The ID of the given webhook setup. Use this ID with <a href="../classes/api_client.client.html#removewebhook">removeWebhook</a></p>
+							<p>Whether or not the &quot;Phone is disconnected&quot; message is showing within the web app.</p>
 						</div>
+						<p>Healthy: <code>false</code></p>
 					</div>
 				</section>
 				<section class="tsd-panel tsd-member tsd-kind-property tsd-parent-kind-interface">
-					<a name="requestconfig" class="tsd-anchor"></a>
-					<h3><span class="tsd-flag ts-flagOptional">Optional</span> request<wbr>Config</h3>
-					<div class="tsd-signature tsd-kind-icon">request<wbr>Config<span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">AxiosRequestConfig</span></div>
+					<a name="online" class="tsd-anchor"></a>
+					<h3><span class="tsd-flag ts-flagOptional">Optional</span> online</h3>
+					<div class="tsd-signature tsd-kind-icon">online<span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span></div>
 					<aside class="tsd-sources">
 					</aside>
 					<div class="tsd-comment tsd-typography">
 						<div class="lead">
-							<p>The optional AxiosRequestConfig to use for firing the webhook event. This can be useful if you want to add some authentication when POSTing data to your server.</p>
+							<p>Result of <code>window.navigator.onLine</code></p>
 						</div>
-						<p>For example, if your webhook requires the username <code>admin</code> and password <code>1234</code> for authentication, you can set the requestConfig to:</p>
-						<pre><code><span style="color: #000000">{</span>
-<span style="color: #000000">  auth: {</span>
-<span style="color: #000000">    username: </span><span style="color: #A31515">&quot;admin&quot;</span><span style="color: #000000">,</span>
-<span style="color: #000000">    password: </span><span style="color: #A31515">&quot;1234&quot;</span><span style="color: #000000">,</span>
-<span style="color: #000000">  }</span>
-<span style="color: #000000">}</span>
-</code></pre>
-						<p>Please note, for security reasons, this is not returned when listing webhooks however it is returned when registering a webhook for verification purposes.</p>
+						<p>Healthy: <code>true</code></p>
 					</div>
 				</section>
 				<section class="tsd-panel tsd-member tsd-kind-property tsd-parent-kind-interface">
-					<a name="ts" class="tsd-anchor"></a>
-					<h3>ts</h3>
-					<div class="tsd-signature tsd-kind-icon">ts<span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span></div>
+					<a name="queuedmessages" class="tsd-anchor"></a>
+					<h3><span class="tsd-flag ts-flagOptional">Optional</span> queued<wbr>Messages</h3>
+					<div class="tsd-signature tsd-kind-icon">queued<wbr>Messages<span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span></div>
 					<aside class="tsd-sources">
 					</aside>
 					<div class="tsd-comment tsd-typography">
 						<div class="lead">
-							<p>Time when the webhook was registered in epoch time</p>
+							<p>The number of messages queued up in the browser. Messages can start being queued up due to the web app awaiting a connection with the host device.</p>
 						</div>
+						<p>Healthy: 0</p>
 					</div>
 				</section>
 				<section class="tsd-panel tsd-member tsd-kind-property tsd-parent-kind-interface">
-					<a name="url" class="tsd-anchor"></a>
-					<h3>url</h3>
-					<div class="tsd-signature tsd-kind-icon">url<span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span></div>
+					<a name="retryingin" class="tsd-anchor"></a>
+					<h3><span class="tsd-flag ts-flagOptional">Optional</span> retrying<wbr>In</h3>
+					<div class="tsd-signature tsd-kind-icon">retrying<wbr>In<span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span></div>
 					<aside class="tsd-sources">
 					</aside>
 					<div class="tsd-comment tsd-typography">
 						<div class="lead">
-							<p>The endpoint to send (POST) the event to.</p>
+							<p>Returns the number of seconds the &quot;Retrying in ...&quot; dialog is indicating. If the dialog is not showing, it will return <code>0</code>.</p>
 						</div>
+						<p>Healthy: <code>0</code></p>
+					</div>
+				</section>
+				<section class="tsd-panel tsd-member tsd-kind-property tsd-parent-kind-interface">
+					<a name="state" class="tsd-anchor"></a>
+					<h3><span class="tsd-flag ts-flagOptional">Optional</span> state</h3>
+					<div class="tsd-signature tsd-kind-icon">state<span class="tsd-signature-symbol">:</span> <a href="../enums/api_model.state.html" class="tsd-signature-type" data-tsd-kind="Enumeration">STATE</a></div>
+					<aside class="tsd-sources">
+					</aside>
+					<div class="tsd-comment tsd-typography">
+						<div class="lead">
+							<p>The state of the web app.</p>
+						</div>
+						<p>Healthy: &#39;CONNECTED&#39;</p>
+					</div>
+				</section>
+				<section class="tsd-panel tsd-member tsd-kind-property tsd-parent-kind-interface">
+					<a name="tryingtoreachphone" class="tsd-anchor"></a>
+					<h3><span class="tsd-flag ts-flagOptional">Optional</span> trying<wbr>ToReach<wbr>Phone</h3>
+					<div class="tsd-signature tsd-kind-icon">trying<wbr>ToReach<wbr>Phone<span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span></div>
+					<aside class="tsd-sources">
+					</aside>
+					<div class="tsd-comment tsd-typography">
+						<div class="lead">
+							<p>Returns <code>true</code> if &quot;trying to reach phone&quot; dialog is detected</p>
+						</div>
+						<p>Healthy: <code>false</code></p>
+					</div>
+				</section>
+				<section class="tsd-panel tsd-member tsd-kind-property tsd-parent-kind-interface">
+					<a name="wapiinjected" class="tsd-anchor"></a>
+					<h3><span class="tsd-flag ts-flagOptional">Optional</span> wapi<wbr>Injected</h3>
+					<div class="tsd-signature tsd-kind-icon">wapi<wbr>Injected<span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span></div>
+					<aside class="tsd-sources">
+					</aside>
+					<div class="tsd-comment tsd-typography">
+						<div class="lead">
+							<p>Returns <code>true</code> if the <code>WAPI</code> object is detected.</p>
+						</div>
+						<p>Healthy: <code>true</code></p>
 					</div>
 				</section>
 			</section>
@@ -255,42 +293,48 @@
 						<a href="../modules.html">Modules</a>
 					</li>
 					<li class="current tsd-kind-module">
-						<a href="../modules/api_model_config.html">api/model/config</a>
+						<a href="../modules/api_model_sessioninfo.html">api/model/session<wbr>Info</a>
 					</li>
 				</ul>
 			</nav>
 			<nav class="tsd-navigation secondary menu-sticky">
 				<ul class="before-current">
-					<li class=" tsd-kind-interface tsd-parent-kind-module">
-						<a href="api_model_config.configobject.html" class="tsd-kind-icon">Config<wbr>Object</a>
-					</li>
-					<li class=" tsd-kind-interface tsd-parent-kind-module">
-						<a href="api_model_config.sessiondata.html" class="tsd-kind-icon">Session<wbr>Data</a>
-					</li>
 				</ul>
 				<ul class="current">
 					<li class="current tsd-kind-interface tsd-parent-kind-module">
-						<a href="api_model_config.webhook.html" class="tsd-kind-icon">Webhook</a>
+						<a href="api_model_sessioninfo.healthcheck.html" class="tsd-kind-icon">Health<wbr>Check</a>
 						<ul>
 							<li class=" tsd-kind-property tsd-parent-kind-interface">
-								<a href="api_model_config.webhook.html#events" class="tsd-kind-icon">events</a>
+								<a href="api_model_sessioninfo.healthcheck.html#ishere" class="tsd-kind-icon">is<wbr>Here</a>
 							</li>
 							<li class=" tsd-kind-property tsd-parent-kind-interface">
-								<a href="api_model_config.webhook.html#id" class="tsd-kind-icon">id</a>
+								<a href="api_model_sessioninfo.healthcheck.html#isphonedisconnected" class="tsd-kind-icon">is<wbr>Phone<wbr>Disconnected</a>
 							</li>
 							<li class=" tsd-kind-property tsd-parent-kind-interface">
-								<a href="api_model_config.webhook.html#requestconfig" class="tsd-kind-icon">request<wbr>Config</a>
+								<a href="api_model_sessioninfo.healthcheck.html#online" class="tsd-kind-icon">online</a>
 							</li>
 							<li class=" tsd-kind-property tsd-parent-kind-interface">
-								<a href="api_model_config.webhook.html#ts" class="tsd-kind-icon">ts</a>
+								<a href="api_model_sessioninfo.healthcheck.html#queuedmessages" class="tsd-kind-icon">queued<wbr>Messages</a>
 							</li>
 							<li class=" tsd-kind-property tsd-parent-kind-interface">
-								<a href="api_model_config.webhook.html#url" class="tsd-kind-icon">url</a>
+								<a href="api_model_sessioninfo.healthcheck.html#retryingin" class="tsd-kind-icon">retrying<wbr>In</a>
+							</li>
+							<li class=" tsd-kind-property tsd-parent-kind-interface">
+								<a href="api_model_sessioninfo.healthcheck.html#state" class="tsd-kind-icon">state</a>
+							</li>
+							<li class=" tsd-kind-property tsd-parent-kind-interface">
+								<a href="api_model_sessioninfo.healthcheck.html#tryingtoreachphone" class="tsd-kind-icon">trying<wbr>ToReach<wbr>Phone</a>
+							</li>
+							<li class=" tsd-kind-property tsd-parent-kind-interface">
+								<a href="api_model_sessioninfo.healthcheck.html#wapiinjected" class="tsd-kind-icon">wapi<wbr>Injected</a>
 							</li>
 						</ul>
 					</li>
 				</ul>
 				<ul class="after-current">
+					<li class=" tsd-kind-interface tsd-parent-kind-module">
+						<a href="api_model_sessioninfo.sessioninfo.html" class="tsd-kind-icon">Session<wbr>Info</a>
+					</li>
 				</ul>
 			</nav>
 		</div>
