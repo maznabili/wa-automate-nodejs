@@ -7,7 +7,7 @@ import { ParticipantChangedEventModel } from './model/group-metadata';
 import { useragent, puppeteerConfig } from '../config/puppeteer.config'
 import { ConfigObject, STATE, LicenseType, Webhook } from './model';
 import { PageEvaluationTimeout, CustomError, ERROR_NAME, AddParticipantError  } from './model/errors';
-import PQueue from 'p-queue';
+import PQueue, { DefaultAddOptions, Options } from 'p-queue';
 import { ev, Spin } from '../controllers/events';
 import { v4 as uuidv4 } from 'uuid';
 /** @ignore */
@@ -65,6 +65,7 @@ import { CollectorOptions } from '../structures/Collector';
 import { MessageCollector } from '../structures/MessageCollector';
 import { injectInitPatch } from '../controllers/init_patch';
 import { Listener } from 'eventemitter2';
+import PriorityQueue from 'p-queue/dist/priority-queue';
 
 export enum namespace {
   Chat = 'Chat',
@@ -206,6 +207,7 @@ declare module WAPI {
   const setGroupIcon: (groupId: string, imgData: string) => Promise<boolean>;
   const getGroupAdmins: (groupId: string) => Promise<ContactId[]>;
   const removeParticipant: (groupId: string, contactId: string) => Promise<boolean | string>;
+  const createLabel: (label: string) => Promise<boolean | string>;
   const addOrRemoveLabels: (label: string, chatId: string, type: string) => Promise<boolean>;
   const promoteParticipant: (groupId: string, contactId: string) => Promise<boolean | string>;
   const demoteParticipant: (groupId: string, contactId: string) => Promise<boolean | string>;
@@ -353,6 +355,10 @@ export class Client {
   private _currentlyBeingKilled: boolean = false;
   private _refreshing : boolean = false
   private _l: any;
+  private _prio: number = Number.MAX_SAFE_INTEGER;
+  private _queues: {
+    [key in SimpleListener] ?: PQueue
+  } = {};
   /**
    * This is used to track if a listener is already used via webhook. Before, webhooks used to be set once per listener. Now a listener can be set via multiple webhooks, or revoked from a specific webhook.
    * For this reason, listeners assigned to a webhook are only set once and map through all possible webhooks to and fire only if the specific listener is assigned.
@@ -372,6 +378,7 @@ export class Client {
     this._createConfig = createConfig || {};
     this._loadedModules = [];
     this._sessionInfo = sessionInfo;
+    this._sessionInfo.INSTANCE_ID = uuidv4();
     this._listeners = {};
     if(this._createConfig.stickerServerEndpoint!== false) this._createConfig.stickerServerEndpoint = true;
     this._setOnClose();
@@ -543,9 +550,20 @@ export class Client {
    /**
     * 
     */
-  private async registerListener(funcName:SimpleListener, fn: any) : Promise<Listener | boolean> {
+  private async registerListener(funcName:SimpleListener, _fn: any, queueOptions ?: Options<PriorityQueue, DefaultAddOptions>) : Promise<Listener | boolean> {
+    let fn;
+    if(queueOptions) {
+      if(!this._queues[funcName]) {
+        this._queues[funcName] = new PQueue(queueOptions)
+      }
+      fn = async data => this._queues[funcName].add(()=>_fn(data), {
+        priority: this.tickPriority()
+      })
+    } else {
+      fn = _fn;
+    }
     if(this._registeredEvListeners && this._registeredEvListeners[funcName]) {
-      return ev.on(`${funcName}.${this.getSessionId()}`,({data})=>fn(data)) as Listener;
+      return ev.on(this.getEventSignature(funcName),({data})=>fn(data)) as Listener;
     }
     /**
      * If evMode is on then make the callback come from ev.
@@ -568,29 +586,6 @@ export class Client {
   
   // NON-STAMDARD LISTENERS
 
-  /**
-   * Listens to messages received
-   * 
-   * @event 
-   * @fires Observable stream of messages
-   */
-  public async onMessage(fn: (message: Message) => void) : Promise<Listener | boolean> {
-    return this.registerListener(SimpleListener.Message, fn);
-    // let funcName = SimpleListener.Message;
-    // this._listeners[funcName] = fn;
-    // const set = () => this.pup(
-    //   ({funcName}) => {
-    //     WAPI.waitNewMessages(false, data => {
-    //       data.forEach(message => {
-    //         //@ts-ignore
-    //         window[funcName](message);
-    //       });
-    //     });
-    //   },{funcName})
-    //   const exists = await this.pup(({funcName})=>window[funcName]?true:false,{funcName});
-    //   if(exists) return await set();
-    // this._page.exposeFunction(funcName, (message: Message) =>fn(message)).then(set).catch(e=>set);
-  }
 
   /**
    * Listens to a log out event
@@ -611,20 +606,41 @@ export class Client {
     return true;
   }
 
- 
+  /**
+   * If you have set `onAnyMessage` or `onMessage` with the second parameter (PQueue options) then you may want to inspect their respective PQueue's.
+   */
+ public getListenerQueues() : {
+    [key in SimpleListener] ?: PQueue
+  } {
+   return this._queues
+  }
 
   // STANDARD SIMPLE LISTENERS
+
+  /**
+   * Listens to incoming messages
+   * 
+   * @event 
+   * @param fn callback
+   * @param queueOptions PQueue options. Set to `{}` for default PQueue.
+   * @fires Observable stream of messages
+   */
+   public async onMessage(fn: (message: Message) => void, queueOptions ?: Options<PriorityQueue, DefaultAddOptions>) : Promise<Listener | boolean> {
+    return this.registerListener(SimpleListener.Message, fn, queueOptions);
+  }
 
    /**
    * Listens to all new messages
    * 
    * @event 
-   * @param to callback
+   * @param fn callback
+   * @param queueOptions PQueue options. Set to `{}` for default PQueue.
    * @fires [[Message]] 
    */
-  public async onAnyMessage(fn: (message: Message) => void) : Promise<Listener | boolean> {
-    return this.registerListener(SimpleListener.AnyMessage, fn);
+  public async onAnyMessage(fn: (message: Message) => void, queueOptions ?: Options<PriorityQueue, DefaultAddOptions>) : Promise<Listener | boolean> {
+    return this.registerListener(SimpleListener.AnyMessage, fn, queueOptions);
   }
+
   /**
    * [REQUIRES AN INSIDERS LICENSE-KEY](https://gum.co/open-wa?tier=Insiders%20Program)
    * 
@@ -867,6 +883,21 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
       {newStatus}
       )
   }
+
+  /**
+   * [REQUIRES AN INSIDERS LICENSE-KEY](https://gum.co/open-wa?tier=Insiders%20Program)
+   * 
+   * Adds label from chat, message or contact. Only for business accounts.
+   * @param label: The desired text of the new label. id will be something simple like anhy nnumber from 1-10, name is the label of the label if that makes sense.
+   * @returns `false` if something went wrong, or the id (usually a number as a string) of the new label (for example `"58"`)
+   */
+   public async createLabel(label: string) : Promise<string | boolean> {
+    return await this.pup(
+      ({label}) => WAPI.createLabel(label),
+      {label}
+      ) as Promise<string | boolean>;
+  }
+
 
   /**
    * Adds label from chat, message or contact. Only for business accounts.
@@ -3431,6 +3462,10 @@ public async getStatus(contactId: ContactId) : Promise<{
     }
   }
 
+  private getEventSignature(simpleListener?: SimpleListener){
+    return `${simpleListener || '**'}.${this._createConfig.sessionId || 'session'}.${this._sessionInfo.INSTANCE_ID}`
+  }
+
   private async registerEv(simpleListener: SimpleListener) {
     if(this[simpleListener]){
       if(!this._registeredEvListeners) this._registeredEvListeners={};
@@ -3438,14 +3473,27 @@ public async getStatus(contactId: ContactId) : Promise<{
         console.log('Listener already registered');
         return false;
       }
-      const sessionId = this.getSessionId();
-      this._registeredEvListeners[simpleListener] = await this[simpleListener](data=>ev.emit(`${simpleListener}.${sessionId}`,this.prepEventData(data,simpleListener)));
+      this._registeredEvListeners[simpleListener] = await this[simpleListener](data=>ev.emit(this.getEventSignature(simpleListener),this.prepEventData(data,simpleListener)));
       return true;
     }
     console.log('Invalid lisetner', simpleListener);
     return false;
   }
-  
+
+  /**
+   * Every time this is called, it returns one less number. This is used to sort out queue priority.
+   */
+  private tickPriority() : number {
+    this._prio = this._prio -1;
+    return this._prio;
+  }
+
+  /**
+   * Get the INSTANCE_ID of the current session
+   */
+  public getInstanceId() : string {
+    return this._sessionInfo.INSTANCE_ID;
+  }
 
   /**
    * Returns a new message collector for the chat which is related to the first parameter c
@@ -3455,7 +3503,7 @@ public async getStatus(contactId: ContactId) : Promise<{
    */
    createMessageCollector(c : Message | ChatId | Chat, filter : (args: any[] | any ) => boolean | Promise<boolean>, options : CollectorOptions) : MessageCollector {
     const chatId : ChatId = ((c as Message)?.chat?.id || (c as Chat)?.id || c) as ChatId;
-    return new MessageCollector(this.getSessionId(), chatId, filter, options);
+    return new MessageCollector(this.getSessionId(), this.getInstanceId(), chatId, filter, options);
    }
 }
 
