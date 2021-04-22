@@ -1,5 +1,5 @@
 import { Page, EvaluateFn } from 'puppeteer';
-import { Chat, LiveLocationChangedEvent, ChatState, ChatMuteDuration } from './model/chat';
+import { Chat, LiveLocationChangedEvent, ChatState, ChatMuteDuration, GroupChatCreationResponse } from './model/chat';
 import { Contact } from './model/contact';
 import { Message } from './model/message';
 import { default as axios, AxiosRequestConfig} from 'axios';
@@ -55,7 +55,7 @@ import { isAuthenticated } from '../controllers/auth';
 import { ChatId, GroupChatId, Content, Base64, MessageId, ContactId, DataURL, FilePath } from './model/aliases';
 import { bleachMessage, decryptMedia } from '@open-wa/wa-decrypt';
 import * as path from 'path';
-import { CustomProduct } from './model/product';
+import { CustomProduct, Label } from './model/product';
 import Crypto from 'crypto';
 import { tmpdir } from 'os';
 import { defaultProcessOptions, Mp4StickerConversionProcessOptions, StickerMetadata } from './model/media';
@@ -276,6 +276,7 @@ declare module WAPI {
   const getWAVersion: () => String;
   const getStoryViewers: (id: string) => Promise<String[]>;
   const getMe: () => any;
+  const getAllLabels: () => any;
   const iAmAdmin: () => Promise<String[]>;
   const getLicenseType: () => Promise<String | false>;
   const getChatWithNonContacts: () => Contact[];
@@ -596,7 +597,7 @@ export class Client {
    */
   public async onLogout(fn: (loggedOut?: boolean)=> any) : Promise<boolean> {
     await this._page.on('request', request => {
-      if(request.url() === "https://web.whatsapp.com/") fn();
+      if(request.url() === "https://web.whatsapp.com/" && !this._refreshing) fn();
     })
     this.onStateChanged(state=>{
       if(state===STATE.UNPAIRED){
@@ -823,8 +824,8 @@ export class Client {
   /**
    * @event 
    * Listens to add and remove events on Groups. This can no longer determine who commited the action and only reports the following events add, remove, promote, demote
-   * @param to group id: xxxxx-yyyy@c.us
-   * @param to callback
+   * @param groupId group id: xxxxx-yyyy@c.us
+   * @param fn callback
    * @returns Observable stream of participantChangedEvent
    */
   public async onParticipantsChanged(groupId: GroupChatId, fn: (participantChangedEvent: ParticipantChangedEventModel) => void, legacy : boolean = false) : Promise<Listener | boolean> {
@@ -909,6 +910,13 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
       ({label, chatId}) => WAPI.addOrRemoveLabels(label, chatId, 'add'),
       {label, chatId}
       ) as Promise<boolean>;
+  }
+
+  /**
+   * Returns all labels and the corresponding tagged items.
+   */
+   public async getAllLabels() : Promise<Label[]> {
+    return await this.pup(() => WAPI.getAllLabels()) as Promise<Label[]>;
   }
 
   /**
@@ -2432,7 +2440,7 @@ public async getStatus(contactId: ContactId) : Promise<{
   /**
    * Create a group and add contacts to it
    * 
-   * @param to group name: 'New group'
+   * @param groupName group name: 'New group'
    * @param contacts: A single contact id or an array of contact ids.
    * @returns Promise<GroupCreationResponse> :
    * ```javascript
@@ -2450,7 +2458,7 @@ public async getStatus(contactId: ContactId) : Promise<{
    * }
    * ```
    */
-  public async createGroup(groupName:string,contacts:ContactId|ContactId[]) : Promise<any> {
+  public async createGroup(groupName:string,contacts:ContactId|ContactId[]) : Promise<GroupChatCreationResponse> {
     return await this.pup(
       ({ groupName, contacts }) => WAPI.createGroup(groupName, contacts),
       { groupName, contacts }
@@ -2465,6 +2473,8 @@ public async getStatus(contactId: ContactId) : Promise<{
    * If the chat does not exist, returns `GROUP_DOES_NOT_EXIST`
    * 
    * If the participantId does not exist in the group chat, returns `NOT_A_PARTICIPANT`
+   * 
+   * If the host account is not an administrator, returns `INSUFFICIENT_PERMISSIONS`
    * 
    * @param {*} groupId `0000000000-00000000@g.us`
    * @param {*} participantId `000000000000@c.us`
@@ -2532,6 +2542,8 @@ public async getStatus(contactId: ContactId) : Promise<{
   * 
   * If the participantId does not exist in the contacts, returns `NOT_A_CONTACT`
   * 
+  * If the host account is not an administrator, returns `INSUFFICIENT_PERMISSIONS`
+  * 
   * @param {*} groupId '0000000000-00000000@g.us'
   * @param {*} participantId '000000000000@c.us'
   * 
@@ -2557,6 +2569,8 @@ public async getStatus(contactId: ContactId) : Promise<{
   * 
   * If the participantId does not exist in the group chat, returns `NOT_A_PARTICIPANT`
   * 
+  * If the host account is not an administrator, returns `INSUFFICIENT_PERMISSIONS`
+  * 
   * @param {*} groupId '0000000000-00000000@g.us'
   * @param {*} participantId '000000000000@c.us'
   */
@@ -2576,6 +2590,8 @@ public async getStatus(contactId: ContactId) : Promise<{
   * If the chat does not exist, returns `GROUP_DOES_NOT_EXIST`
   * 
   * If the participantId does not exist in the group chat, returns `NOT_A_PARTICIPANT`
+  * 
+  * If the host account is not an administrator, returns `INSUFFICIENT_PERMISSIONS`
   * 
   * @param {*} groupId '0000000000-00000000@g.us'
   * @param {*} participantId '000000000000@c.us'
@@ -3141,7 +3157,7 @@ public async getStatus(contactId: ContactId) : Promise<{
 
    /**
     * This simple function halves the amount of chats in your session message cache. This does not delete messages off your phone. If over a day you've processed 4000 messages this will possibly result in 4000 messages being present in your session.
-    * Calling this method will cut the message cache to 2000 messages, therefore reducing the memory usage of your process.
+    * Calling this method will cut the message cache as much as possible, reducing the memory usage of your process.
     * You should use this in conjunction with `getAmountOfLoadedMessages` to intelligently control the session message cache.
     */
     public async cutChatCache() : Promise<{
@@ -3293,8 +3309,10 @@ public async getStatus(contactId: ContactId) : Promise<{
       if(this[m]){
         try {
         const response = await this[m](...args);
+        let success = true;
+        if(typeof response == 'string' && (response.startsWith("Error") || response.startsWith("ERROR"))) success = false
         return res.send({
-          success:true,
+          success,
           response
         })
         } catch (error) {
