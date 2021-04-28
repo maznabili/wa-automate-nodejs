@@ -290,6 +290,7 @@ declare module WAPI {
   const getAllChats: () => any;
   const healthCheck: () => any;
   const getState: () => string;
+  const getUnsentMessages: () => Promise<Message[]>;
   const forceUpdateConnectionState: () => Promise<string>;
   const getBatteryLevel: () => number;
   const getIsPlugged: () => boolean;
@@ -310,7 +311,7 @@ declare module WAPI {
   const getAllGroups: () => Promise<Chat[]>;
   const getGroupParticipantIDs: (groupId: string) => Promise<string[]>;
   const getGroupInfo: (groupId: string) => Promise<any>;
-  const joinGroupViaLink: (link: string) => Promise<string | boolean | number>;
+  const joinGroupViaLink: (link: string, returnChatObj?: boolean) => Promise<string | boolean | number | Chat>;
   const muteChat: (chatId: ChatId, muteDuration: ChatMuteDuration) => Promise<string | boolean | number>;
   const unmuteChat: (chatId: ChatId) => Promise<string | boolean | number>;
   const leaveGroup: (groupId: string) => any;
@@ -995,6 +996,13 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
    */
   public async getConnectionState() : Promise<STATE> {
     return await this._page.evaluate(() => WAPI.getState()) as STATE;
+  }
+
+  /**
+   * Retreive an array of messages that are not yet sent to the recipient via the host account device (i.e no ticks)
+   */
+  public async getUnsentMessages() : Promise<Message[]> {
+    return await this._page.evaluate(() => WAPI.getUnsentMessages());
   }
 
   /**
@@ -1948,15 +1956,18 @@ public async iAmAdmin() : Promise<GroupChatId[]>  {
  * - https://chat.whatsapp.com/DHTGJUfFJAV9MxOpZO1fBZ
  * - DHTGJUfFJAV9MxOpZO1fBZ
  * 
- * If you have been removed from the group previously, it will return `401`
+ *  If you have been removed from the group previously, it will return `401`
+ * 
+ * @param returnChatObj boolean When this is set to true and if the group was joined successfully, it will return a serialzed Chat object which includes group information and metadata. This is useful when you want to immediately do something with group metadata.
+ * 
  * 
  * @returns Promise<string | boolean | number> Either false if it didn't work, or the group id.
  */
-  public async joinGroupViaLink(link: string) : Promise<string | boolean | number>{
+  public async joinGroupViaLink(link: string, returnChatObj?: boolean) : Promise<string | boolean | number | Chat>{
     return await this.pup(
-      link => WAPI.joinGroupViaLink(link),
-      link
-    ) as Promise<string | boolean | number>;
+      ({link, returnChatObj}) => WAPI.joinGroupViaLink(link, returnChatObj),
+      {link, returnChatObj}
+    ) as Promise<string | boolean | number | Chat>;
   }
 
 
