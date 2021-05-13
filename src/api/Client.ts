@@ -119,6 +119,7 @@ async function convertMp4BufferToWebpDataUrl(file: DataURL | Buffer | Base64, pr
  * @returns Promise<DataURL>
  */
 async function getDUrl(url: string, optionsOverride: any = {} ){
+  // eslint-disable-next-line no-useless-catch
   try {
     const res = await axios({
         method:"get",
@@ -132,9 +133,8 @@ async function getDUrl(url: string, optionsOverride: any = {} ){
       });
     const dUrl : DataURL = `data:${res.headers['content-type']};base64,${Buffer.from(res.data, 'binary').toString('base64')}`;
     return dUrl;
-    // return Buffer.from(response.data, 'binary').toString('base64')
   } catch (error) {
-    console.log("TCL: getDUrl -> error", error)
+    throw error
   }
 }
 
@@ -637,7 +637,7 @@ export class Client {
    * @fires Observable stream of messages
    */
    public async onMessage(fn: (message: Message) => void, queueOptions ?: Options<PriorityQueue, DefaultAddOptions>) : Promise<Listener | boolean> {
-    return this.registerListener(SimpleListener.Message, fn, queueOptions);
+    return this.registerListener(SimpleListener.Message, fn, this?._createConfig?.pQueueDefault || queueOptions);
   }
 
    /**
@@ -649,7 +649,7 @@ export class Client {
    * @fires [[Message]] 
    */
   public async onAnyMessage(fn: (message: Message) => void, queueOptions ?: Options<PriorityQueue, DefaultAddOptions>) : Promise<Listener | boolean> {
-    return this.registerListener(SimpleListener.AnyMessage, fn, queueOptions);
+    return this.registerListener(SimpleListener.AnyMessage, fn, this?._createConfig?.pQueueDefault || queueOptions);
   }
 
   /**
@@ -1574,7 +1574,6 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
      const base64 = await getDUrl(url, requestConfig);
       return await this.sendFile(to,base64,filename,caption,quotedMsgId,waitForId,ptt,withoutPreview, hideTags)
     } catch(error) {
-      console.log('Something went wrong', error);
       throw error;
     }
   }
@@ -2545,6 +2544,7 @@ public async getStatus(contactId: ContactId) : Promise<{
  * @returns boolean true if it was set, false if it didn't work. It usually doesn't work if the image file is too big.
  */
   public async setGroupIconByUrl(groupId: GroupChatId, url: string, requestConfig: AxiosRequestConfig = {}) : Promise<boolean> {
+    // eslint-disable-next-line no-useless-catch
     try {
       const base64 = await getDUrl(url, requestConfig);
        return await this.setGroupIcon(groupId,base64);
@@ -2743,7 +2743,6 @@ public async getStatus(contactId: ContactId) : Promise<{
       const base64 = await getDUrl(url, requestConfig);
       return await this.sendImageAsSticker(to, base64, stickerMetadata);
      } catch(error) {
-       console.log('Something went wrong', error);
        throw error;
      }
   }

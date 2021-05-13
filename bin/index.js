@@ -13,6 +13,7 @@ const isUrl = require('is-url');
 const tcpPortUsed = require('tcp-port-used');
 const changeCase = require("change-case");
 const robots = require("express-robots-txt");
+const JSON5 = require('json5')
 const extraFlags = {};
 const configWithCases = require('./config-schema.json');
 const commandLineUsage = require('command-line-usage');
@@ -35,7 +36,7 @@ const tryOpenFileAsObject = (filelocation, needArray = false) => {
 	if(fs.existsSync(filelocation) || fs.existsSync(relativePath)) {
 		const fp = fs.existsSync(filelocation)  ? filelocation : relativePath;
 		try {
-			let data = JSON.parse(fs.readFileSync(fp, 'utf8'));
+			let data = JSON5.parse(fs.readFileSync(fp, 'utf8'));
 			if(data && (Array.isArray(data) == needArray)) res = data;
 		} catch (error) {
 			throw `Unable to parse config file as JSON. Please make sure ${fp} is a valid JSON config file`;
@@ -403,7 +404,7 @@ const c = {
 	...configFile || {},
 	...envArgs
 };
-const PORT = c.port;
+const PORT = c.port || 8080;
 let config = {
 	...c
 };
@@ -591,7 +592,7 @@ return await create({ ...config })
 			swCol.openapi="3.0.3"
 			swCol.externalDocs = {
 				"description": "Find more info here",
-				"url": "https://http://openwa.dev/"
+				"url": "https://openwa.dev/"
 			  }
 			  if(c.key) {
 				swCol.components = {
@@ -632,7 +633,10 @@ return await create({ ...config })
 					}
 				}
 			}
-			app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swCol, swOptions));
+			app.use('/api-docs', (req, res, next) => {
+				if(req.originalUrl=="/api-docs") return res.redirect('api-docs/')
+				next()
+			  }, swaggerUi.serve, swaggerUi.setup(swCol, swOptions));
 		}
 
 		if(c && c.stats && swCol) {
