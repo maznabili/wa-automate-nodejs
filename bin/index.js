@@ -19,6 +19,14 @@ const configWithCases = require('./config-schema.json');
 const commandLineUsage = require('command-line-usage');
 const chalk = require('chalk');
 const axios = require('axios').default;
+const without = (obj, key) => {
+	const {
+		// eslint-disable-next-line @typescript-eslint/no-unused-vars
+		[key] : discard,
+		...rest
+	} = obj;
+	return rest;
+}
 const isBase64 = (str) => {
 	const len = str.length;
 	if (!len || len % 4 !== 0 || /[^A-Z0-9+\/=]/i.test(str)) {
@@ -233,6 +241,11 @@ const helptext = commandLineUsage([{
 			description: "Keeps the process alive when host account logs out of session. default is false"
 		},
 		{
+			name: 'debug',
+			type: Boolean,
+			description: "Print out the CLI flag values and the WA_* env vars. default is false"
+		},
+		{
 			name: 'license-key',
 			alias: 'l',
 			type: String,
@@ -370,6 +383,10 @@ const cli = meow(helptext, {
 			type: 'boolean',
 			default: false
 		},
+		debug: { 
+			type: 'boolean',
+			default: false
+		},
 		popupPort: {
 		type: 'number',
 		}
@@ -468,6 +485,15 @@ if(c.apiHost) {
 	c.apiHost = c.apiHost.replace(/\/$/, '')
 }
 
+if(c.debug) {
+	console.log('DEBUG - flags:', c)
+	let WA_ENV = {};
+	Object.keys(process.env).map(k=>{
+		if(k.startsWith('WA_')) WA_ENV[k] = process.env[k];
+	})
+	console.log('DEBUG - env vars:', WA_ENV)
+}
+
 async function start(){
     try {
         const {status, data} = await axios.post(`http://localhost:${PORT}/getConnectionState`);
@@ -555,10 +581,10 @@ return await create({ ...config })
 
 		if(c && (c.generateApiDocs || c.stats)) {
 			console.log('Generating Swagger Spec');
-			pmCol = await generatePostmanJson({
+			pmCol = await generatePostmanJson(without({
 				...c,
 				...config
-			});
+			}, 'apiHost'));
 			console.log(`Postman collection generated: open-wa-${c.sessionId}.postman_collection.json`);
 			swCol = p2s.default(pmCol);
 			/**
@@ -566,6 +592,7 @@ return await create({ ...config })
 			 */
 			Object.keys(swCol.paths).forEach(p => {
 				let path = swCol.paths[p].post;
+				// console.log(path, swCol.paths[p])
 				if(c.key) swCol.paths[p].post.security = [
 					{
 						"api_key": []
@@ -663,7 +690,9 @@ return await create({ ...config })
 			  }
 			}));
 		}
-		
+		if(config.messagePreprocessor==="AUTO_DECRYPT_SAVE") {
+			app.use("/media", express.static('media'))
+		}
 		app.use(client.middleware((c && c.useSessionIdInPath)));
 		if(process.send){
 			process.send('ready');

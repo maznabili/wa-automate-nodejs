@@ -3,7 +3,7 @@
 <head>
 	<meta charset="utf-8">
 	<meta http-equiv="X-UA-Compatible" content="IE=edge">
-	<title>namespace | @open-wa/wa-automate - v3.14.0</title>
+	<title>PREPROCESSORS | @open-wa/wa-automate - v3.14.0</title>
 	<meta name="description" content="Documentation for @open-wa/wa-automate - v3.14.0">
 	<meta name="viewport" content="width=device-width, initial-scale=1">
 	<link rel="stylesheet" href="../assets/css/main.css">
@@ -65,19 +65,27 @@
 					<a href="../modules.html">Globals</a>
 				</li>
 				<li>
-					<a href="../modules/api_client.html">api/Client</a>
+					<a href="../modules/structures_preprocessors.html">structures/preProcessors</a>
 				</li>
 				<li>
-					<a href="api_client.namespace.html">namespace</a>
+					<a href="structures_preprocessors.preprocessors.html">PREPROCESSORS</a>
 				</li>
 			</ul>
-			<h1>Enumeration namespace</h1>
+			<h1>Enumeration PREPROCESSORS</h1>
 		</div>
 	</div>
 </header>
 <div class="container container-main">
 	<div class="row">
 		<div class="col-8 col-content">
+			<section class="tsd-panel tsd-comment">
+				<div class="tsd-comment tsd-typography">
+					<div class="lead">
+						<p>A set of easy to use, built-in message processors.</p>
+					</div>
+					<p><a href="https://github.com/open-wa/wa-automate-nodejs/blob/master/src/structures/preProcessors.ts">Check out the processor code here</a></p>
+				</div>
+			</section>
 			<section class="tsd-panel-group tsd-index-group">
 				<h2>Index</h2>
 				<section class="tsd-panel tsd-index-panel">
@@ -85,10 +93,10 @@
 						<section class="tsd-index-section ">
 							<h3>Enumeration members</h3>
 							<ul class="tsd-index-list">
-								<li class="tsd-kind-enum-member tsd-parent-kind-enum"><a href="api_client.namespace.html#chat" class="tsd-kind-icon">Chat</a></li>
-								<li class="tsd-kind-enum-member tsd-parent-kind-enum"><a href="api_client.namespace.html#contact" class="tsd-kind-icon">Contact</a></li>
-								<li class="tsd-kind-enum-member tsd-parent-kind-enum"><a href="api_client.namespace.html#groupmetadata" class="tsd-kind-icon">Group<wbr>Metadata</a></li>
-								<li class="tsd-kind-enum-member tsd-parent-kind-enum"><a href="api_client.namespace.html#msg" class="tsd-kind-icon">Msg</a></li>
+								<li class="tsd-kind-enum-member tsd-parent-kind-enum"><a href="structures_preprocessors.preprocessors.html#auto_decrypt" class="tsd-kind-icon">AUTO_<wbr>DECRYPT</a></li>
+								<li class="tsd-kind-enum-member tsd-parent-kind-enum"><a href="structures_preprocessors.preprocessors.html#auto_decrypt_save" class="tsd-kind-icon">AUTO_<wbr>DECRYPT_<wbr>SAVE</a></li>
+								<li class="tsd-kind-enum-member tsd-parent-kind-enum"><a href="structures_preprocessors.preprocessors.html#body_only" class="tsd-kind-icon">BODY_<wbr>ONLY</a></li>
+								<li class="tsd-kind-enum-member tsd-parent-kind-enum"><a href="structures_preprocessors.preprocessors.html#scrub" class="tsd-kind-icon">SCRUB</a></li>
 							</ul>
 						</section>
 					</div>
@@ -97,32 +105,54 @@
 			<section class="tsd-panel-group tsd-member-group ">
 				<h2>Enumeration members</h2>
 				<section class="tsd-panel tsd-member tsd-kind-enum-member tsd-parent-kind-enum">
-					<a name="chat" class="tsd-anchor"></a>
-					<h3>Chat</h3>
-					<div class="tsd-signature tsd-kind-icon">Chat<span class="tsd-signature-symbol">:</span> <span class="tsd-signature-symbol"> = &quot;Chat&quot;</span></div>
+					<a name="auto_decrypt" class="tsd-anchor"></a>
+					<h3>AUTO_<wbr>DECRYPT</h3>
+					<div class="tsd-signature tsd-kind-icon">AUTO_<wbr>DECRYPT<span class="tsd-signature-symbol">:</span> <span class="tsd-signature-symbol"> = &quot;AUTO_DECRYPT&quot;</span></div>
 					<aside class="tsd-sources">
 					</aside>
+					<div class="tsd-comment tsd-typography">
+						<div class="lead">
+							<p>Replaces the media thumbnail base64 in <code>body</code> with the actual file&#39;s DataURL.</p>
+						</div>
+					</div>
 				</section>
 				<section class="tsd-panel tsd-member tsd-kind-enum-member tsd-parent-kind-enum">
-					<a name="contact" class="tsd-anchor"></a>
-					<h3>Contact</h3>
-					<div class="tsd-signature tsd-kind-icon">Contact<span class="tsd-signature-symbol">:</span> <span class="tsd-signature-symbol"> = &quot;Contact&quot;</span></div>
+					<a name="auto_decrypt_save" class="tsd-anchor"></a>
+					<h3>AUTO_<wbr>DECRYPT_<wbr>SAVE</h3>
+					<div class="tsd-signature tsd-kind-icon">AUTO_<wbr>DECRYPT_<wbr>SAVE<span class="tsd-signature-symbol">:</span> <span class="tsd-signature-symbol"> = &quot;AUTO_DECRYPT_SAVE&quot;</span></div>
 					<aside class="tsd-sources">
 					</aside>
+					<div class="tsd-comment tsd-typography">
+						<div class="lead">
+							<p>Automatically saves the file in a folder named <code>/media</code> relative to the process working directory.</p>
+						</div>
+						<p>PLEASE NOTE, YOU WILL NEED TO MANUALLY CLEAR THIS FOLDER!!!</p>
+					</div>
 				</section>
 				<section class="tsd-panel tsd-member tsd-kind-enum-member tsd-parent-kind-enum">
-					<a name="groupmetadata" class="tsd-anchor"></a>
-					<h3>Group<wbr>Metadata</h3>
-					<div class="tsd-signature tsd-kind-icon">Group<wbr>Metadata<span class="tsd-signature-symbol">:</span> <span class="tsd-signature-symbol"> = &quot;GroupMetadata&quot;</span></div>
+					<a name="body_only" class="tsd-anchor"></a>
+					<h3>BODY_<wbr>ONLY</h3>
+					<div class="tsd-signature tsd-kind-icon">BODY_<wbr>ONLY<span class="tsd-signature-symbol">:</span> <span class="tsd-signature-symbol"> = &quot;BODY_ONLY&quot;</span></div>
 					<aside class="tsd-sources">
 					</aside>
+					<div class="tsd-comment tsd-typography">
+						<div class="lead">
+							<p>A preprocessor that limits the amount of base64 data is present in the message object by removing duplication of <code>body</code> in <code>content</code> by replacing <code>content</code> with <code>&quot;&quot;</code>.</p>
+						</div>
+					</div>
 				</section>
 				<section class="tsd-panel tsd-member tsd-kind-enum-member tsd-parent-kind-enum">
-					<a name="msg" class="tsd-anchor"></a>
-					<h3>Msg</h3>
-					<div class="tsd-signature tsd-kind-icon">Msg<span class="tsd-signature-symbol">:</span> <span class="tsd-signature-symbol"> = &quot;Msg&quot;</span></div>
+					<a name="scrub" class="tsd-anchor"></a>
+					<h3>SCRUB</h3>
+					<div class="tsd-signature tsd-kind-icon">SCRUB<span class="tsd-signature-symbol">:</span> <span class="tsd-signature-symbol"> = &quot;SCRUB&quot;</span></div>
 					<aside class="tsd-sources">
 					</aside>
+					<div class="tsd-comment tsd-typography">
+						<div class="lead">
+							<p>This preprocessor scrubs <code>body</code> and <code>content</code> from media messages.
+							This would be useful if you want to reduce the message object size because neither of these values represent the actual file, only the thumbnail.</p>
+						</div>
+					</div>
 				</section>
 			</section>
 		</div>
@@ -205,7 +235,7 @@
 						<a href="../modules.html">Modules</a>
 					</li>
 					<li class="current tsd-kind-module">
-						<a href="../modules/api_client.html">api/<wbr>Client</a>
+						<a href="../modules/structures_preprocessors.html">structures/pre<wbr>Processors</a>
 					</li>
 				</ul>
 			</nav>
@@ -214,27 +244,24 @@
 				</ul>
 				<ul class="current">
 					<li class="current tsd-kind-enum tsd-parent-kind-module">
-						<a href="api_client.namespace.html" class="tsd-kind-icon">namespace</a>
+						<a href="structures_preprocessors.preprocessors.html" class="tsd-kind-icon">PREPROCESSORS</a>
 						<ul>
 							<li class=" tsd-kind-enum-member tsd-parent-kind-enum">
-								<a href="api_client.namespace.html#chat" class="tsd-kind-icon">Chat</a>
+								<a href="structures_preprocessors.preprocessors.html#auto_decrypt" class="tsd-kind-icon">AUTO_<wbr>DECRYPT</a>
 							</li>
 							<li class=" tsd-kind-enum-member tsd-parent-kind-enum">
-								<a href="api_client.namespace.html#contact" class="tsd-kind-icon">Contact</a>
+								<a href="structures_preprocessors.preprocessors.html#auto_decrypt_save" class="tsd-kind-icon">AUTO_<wbr>DECRYPT_<wbr>SAVE</a>
 							</li>
 							<li class=" tsd-kind-enum-member tsd-parent-kind-enum">
-								<a href="api_client.namespace.html#groupmetadata" class="tsd-kind-icon">Group<wbr>Metadata</a>
+								<a href="structures_preprocessors.preprocessors.html#body_only" class="tsd-kind-icon">BODY_<wbr>ONLY</a>
 							</li>
 							<li class=" tsd-kind-enum-member tsd-parent-kind-enum">
-								<a href="api_client.namespace.html#msg" class="tsd-kind-icon">Msg</a>
+								<a href="structures_preprocessors.preprocessors.html#scrub" class="tsd-kind-icon">SCRUB</a>
 							</li>
 						</ul>
 					</li>
 				</ul>
 				<ul class="after-current">
-					<li class=" tsd-kind-class tsd-parent-kind-module">
-						<a href="../classes/api_client.client.html" class="tsd-kind-icon">Client</a>
-					</li>
 				</ul>
 			</nav>
 		</div>
