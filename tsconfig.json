@@ -60,6 +60,7 @@
       "./src/utils",
       "./src/controllers",
       "./src/structures",
+      "./src/connect",
     ],
     "pages": {
       "groups": [
@@ -251,7 +252,9 @@
       "GroupChatCreationResponse",
       "GroupChatCreationParticipantAddResponse",
       "CollectorOptions",
-      "PREPROCESSORS"
+      "PREPROCESSORS",
+      "SocketClient",
+      "SocketClient.connect",
     ]
   }
 }
