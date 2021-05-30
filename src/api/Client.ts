@@ -1,3 +1,4 @@
+import { default as mime } from 'mime-types';
 import { Page, EvaluateFn } from 'puppeteer';
 import { Chat, LiveLocationChangedEvent, ChatState, ChatMuteDuration, GroupChatCreationResponse } from './model/chat';
 import { Contact } from './model/contact';
@@ -16,7 +17,6 @@ import datauri from 'datauri'
 import pino from 'pino'
 import isUrl from 'is-url'
 import { readJsonSync } from 'fs-extra'
-import {default as _optionalRequire} from 'optional-require'
 import treekill from 'tree-kill';
 import { HealthCheck, SessionInfo } from './model/sessionInfo';
 import { deleteSessionData, injectApi } from '../controllers/browser';
@@ -25,8 +25,6 @@ import { ChatId, GroupChatId, Content, Base64, MessageId, ContactId, DataURL, Fi
 import { bleachMessage, decryptMedia } from '@open-wa/wa-decrypt';
 import * as path from 'path';
 import { CustomProduct, Label } from './model/product';
-import Crypto from 'crypto';
-import { tmpdir } from 'os';
 import { defaultProcessOptions, Mp4StickerConversionProcessOptions, StickerMetadata } from './model/media';
 import { getAndInjectLicense, getAndInjectLivePatch, getLicense } from '../controllers/initializer';
 import { SimpleListener } from './model/events';
@@ -37,21 +35,10 @@ import { Listener } from 'eventemitter2';
 import PriorityQueue from 'p-queue/dist/priority-queue';
 import { MessagePreprocessors } from '../structures/preProcessors';
 import { NextFunction, Request, Response } from 'express';
+import { base64MimeType, getDUrl, isBase64, isDataURL } from '../utils/tools';
 
 /** @ignore */
 const pkg = readJsonSync(path.join(__dirname,'../../package.json')),
-optionalRequire = _optionalRequire(require),
-isDataURL = (s: string) => !!s.match(/^data:((?:\w+\/(?:(?!;).)+)?)((?:;[\w\W]*?[^;])*),(.+)$/g),
-isBase64 = (str: string) => {
-  const len = str.length;
-  if (!len || len % 4 !== 0 || /[^A-Z0-9+/=]/i.test(str)) {
-    return false;
-  }
-  const firstPaddingChar = str.indexOf('=');
-  return firstPaddingChar === -1 ||
-    firstPaddingChar === len - 1 ||
-    (firstPaddingChar === len - 2 && str[len - 1] === '=');
-},
 createLogger = (sessionId: string, sessionInfo: SessionInfo, config: ConfigObject) => {
   const p = path.join(path.resolve(process.cwd()),`/logs/${sessionId || 'session'}/${sessionInfo.START_TS}.log`)
   if(!fs.existsSync(p)) {
@@ -79,90 +66,6 @@ export enum namespace {
   GroupMetadata = 'GroupMetadata'
 }
 
-/**
- * @internal
- */
-async function convertMp4BufferToWebpDataUrl(file: DataURL | Buffer | Base64, processOptions: Mp4StickerConversionProcessOptions = defaultProcessOptions) {
-  processOptions = Object.keys(process).length ? {
-    ...defaultProcessOptions,
-    ...processOptions
-  } : defaultProcessOptions
-  const ffmpeg = optionalRequire('fluent-ffmpeg', "Missing peer dependency: npm i fluent-ffmpeg");
-  if(!ffmpeg) return false;
-  const tempFile = path.join(tmpdir(), `processing.${Crypto.randomBytes(6).readUIntLE(0, 6).toString(36)}.webp`);
-  const {default : _stream} = await import("stream")
-  const stream = new _stream.Readable();
-  stream.push(Buffer.isBuffer(file) ? file : Buffer.from(file.replace('data:video/mp4;base64,',''), 'base64'));
-  stream.push(null);
-  await new Promise((resolve, reject) => {
-      ffmpeg(stream)
-          .inputFormat('mp4')
-          .on('start', function (cmd) {
-              if(processOptions?.log) console.log('Started ' + cmd);
-          })
-          .on('error', function (err) {
-            if(processOptions?.log) console.log('An error occurred: ' + err.message);
-              reject(err)
-          })
-          .on('end', function () {
-            if(processOptions?.log) console.log('Finished encoding');
-              resolve(true)
-          })
-          .addOutputOptions([`-vcodec`, `libwebp`, `-vf`, `${processOptions.crop?`crop=w='min(min(iw,ih),500)':h='min(min(iw,ih),500)',`:``}scale=500:500,setsar=1,fps=${processOptions.fps}`, `-loop`, `${processOptions.loop}`, `-ss`, processOptions.startTime, `-t`, processOptions.endTime, `-preset`, `default`, `-an`, `-vsync`, `0`, `-s`, `512:512`])
-          .toFormat("webp")
-          .save(tempFile);
-  })
-  const d = await datauri(tempFile);
-  fs.unlinkSync(tempFile)
-  return d;
-}
-
-/**
- * @internal
- * A convinience method to download the [[DataURL]] of a file
- * @param url The url
- * @param optionsOverride You can use this to override the [axios request config](https://github.com/axios/axios#request-config)
- * @returns Promise<DataURL>
- */
-async function getDUrl(url: string, optionsOverride: any = {} ){
-  // eslint-disable-next-line no-useless-catch
-  try {
-    const res = await axios({
-        method:"get",
-        url,
-        headers: {
-          'DNT':1,
-          'Upgrade-Insecure-Requests':1
-        },
-        ...optionsOverride,
-        responseType: 'arraybuffer'
-      });
-    const dUrl : DataURL = `data:${res.headers['content-type']};base64,${Buffer.from(res.data, 'binary').toString('base64')}`;
-    return dUrl;
-  } catch (error) {
-    throw error
-  }
-}
-
-/**
- * @internal
- * Use this to extract the mime type from a [[DataURL]]
- */
-function base64MimeType(dUrl : DataURL) {
-  let result = null;
-
-  if (typeof dUrl !== 'string') {
-    return result;
-  }
-
-  const mime = dUrl.match(/data:([a-zA-Z0-9]+\/[a-zA-Z0-9-.+]+).*,.*/);
-
-  if (mime && mime.length) {
-    result = mime[1];
-  }
-
-  return result;
-}
 
 /* eslint-disable */
 declare module WAPI {
@@ -331,6 +234,7 @@ declare module WAPI {
   const sendMultipleContacts: (chatId: ChatId, contacts: ContactId[]) => any;
   const simulateTyping: (to: string, on: boolean) => Promise<boolean>;
   const archiveChat: (id: string, archive: boolean) => Promise<boolean>;
+  const pinChat: (id: string, pin: boolean) => Promise<boolean>;
   const isConnected: () => Boolean;
   const loadEarlierMessages: (contactId: string) => Promise<Message []>;
   const getChatsByLabel: (label: string) => Promise<Chat[] | string>;
@@ -1353,14 +1257,16 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
     hideTags ?: boolean
   ) : Promise<MessageId | boolean> {
       //check if the 'base64' file exists
-      if(!isDataURL(file) && !isBase64(file)) {
+      if(!isDataURL(file) && !isBase64(file) && !file.includes("data:")) {
         //must be a file then
         const relativePath = path.join(path.resolve(process.cwd(),file|| ''));
         if(fs.existsSync(file) || fs.existsSync(relativePath)) {
           file = await datauri(fs.existsSync(file)  ? file : relativePath);
         } else if(isUrl(file)){
           return await this.sendFileFromUrl(to,file,filename,caption,quotedMsgId,{},waitForId,ptt,withoutPreview, hideTags);
-        } else throw new CustomError(ERROR_NAME.FILE_NOT_FOUND,'Cannot find file. Make sure the file reference is relative, a valid URL or a valid DataURL')
+        } else throw new CustomError(ERROR_NAME.FILE_NOT_FOUND,`Cannot find file. Make sure the file reference is relative, a valid URL or a valid DataURL: ${file.slice(0,25)}`)
+      } else if(file.includes("data:") && file.includes("undefined") || file.includes("application/octet-stream") && filename && mime.lookup(filename)) {
+        file = `data:${mime.lookup(filename)};base64,${file.split(',')[1]}`
       }
     
    const err = [
@@ -1447,6 +1353,12 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
 
   /**
    * Sends a file to given chat, with caption or not, using base64. This is exactly the same as sendImage
+   * 
+   * Please note that any file that resolves to mime-type `octet-stream` will, by default, resolve to an MP4 file.
+   * 
+   * If you want a specific filetype, then explcitly select the correct mime-type from https://www.iana.org/assignments/media-types/media-types.xhtml
+   * 
+   * 
    * @param to chat id `xxxxx@c.us`
    * @param file DataURL data:image/xxx;base64,xxx or the RELATIVE (should start with `./` or `../`) path of the file you want to send. With the latest version, you can now set this to a normal URL (for example [GET] `https://file-examples-com.github.io/uploads/2017/10/file_example_JPG_2500kB.jpg`).
    * @param filename string xxxxx
@@ -1492,7 +1404,7 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
   /**
    * Attempts to send a file as a voice note. Useful if you want to send an mp3 file.
    * @param to chat id `xxxxx@c.us`
-   * @param base64 base64 data:image/xxx;base64,xxx or the path of the file you want to send.
+   * @param file base64 data:image/xxx;base64,xxx or the path of the file you want to send.
    * @param quotedMsgId string true_0000000000@c.us_JHB2HB23HJ4B234HJB to send as a reply to a message
    * @returns Promise <boolean | string> This will either return true or the id of the message. It will return true after 10 seconds even if waitForId is true
    */
@@ -1505,14 +1417,17 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
   }
   
   /**
-   * Alias for [[sendPtt]]
+   * Send an audio file with the default audio player (not PTT/voice message)
+   * @param to chat id `xxxxx@c.us`
+   * @param base64 base64 data:image/xxx;base64,xxx or the path of the file you want to send.
+   * @param quotedMsgId string true_0000000000@c.us_JHB2HB23HJ4B234HJB to send as a reply to a message
    */
   public async sendAudio(
     to: ChatId,
     file: DataURL | FilePath,
-    quotedMsgId: MessageId,
+    quotedMsgId ?: MessageId,
   ) : Promise<MessageId> {
-    return this.sendPtt(to, file,quotedMsgId);
+    return this.sendFile(to,file, 'file.mp3', '', quotedMsgId, true, false, false, false) as Promise<MessageId> ;
   }
 
 
@@ -1760,10 +1675,24 @@ public async iAmAdmin() : Promise<GroupChatId[]>  {
    * @param archive boolean true => archive, false => unarchive
    * @return boolean true: worked, false: didnt work (probably already in desired state)
    */
-  public async archiveChat(id: ChatId, archive: boolean) : Promise<boolean>{
+   public async archiveChat(id: ChatId, archive: boolean) : Promise<boolean>{
     return await this.pup(
       ({ id, archive }) => WAPI.archiveChat(id, archive),
       { id, archive }
+    ) as Promise<boolean>;
+  }
+
+  /**
+   * Pin/Unpin chats
+   * 
+   * @param id The id of the conversation
+   * @param archive boolean true => pin, false => unpin
+   * @return boolean true: worked
+   */
+  public async pinChat(id: ChatId, pin: boolean) : Promise<boolean>{
+    return await this.pup(
+      ({ id, pin }) => WAPI.pinChat(id, pin),
+      { id, pin }
     ) as Promise<boolean>;
   }
 
@@ -2179,7 +2108,7 @@ public async contactUnblock(id: ContactId) : Promise<boolean> {
     if(!m) return false;
     return {
       ...bleachMessage(m)
-    } as Message;
+    } as unknown as Message;
   }
 
   /**
@@ -2544,7 +2473,6 @@ public async getStatus(contactId: ContactId) : Promise<{
  * @returns boolean true if it was set, false if it didn't work. It usually doesn't work if the image file is too big.
  */
   public async setGroupIcon(groupId: GroupChatId, image: DataURL) :Promise<boolean> {
-    const buff = Buffer.from(image.replace(/^data:image\/(png|gif|jpeg);base64,/,''), 'base64');
     const mimeInfo = base64MimeType(image);
     console.log("setGroupIcon -> mimeInfo", mimeInfo)
     if(!mimeInfo || mimeInfo.includes("image")){
@@ -2553,15 +2481,6 @@ public async getStatus(contactId: ContactId) : Promise<{
         imgData = await this.stickerServerRequest('convertGroupIcon', {
           image
         })
-      } else {
-        const sharp = optionalRequire('sharp',  "Missing peer dependency: npm i sharp");
-        if(!sharp) return false;
-        //no matter what, convert to jpeg, resize + autoscale to width 48 px
-        const scaledImageBuffer = await sharp(buff,{ failOnError: false })
-        .resize({ height: 300 })
-        .toBuffer();
-        const jpeg = sharp(scaledImageBuffer,{ failOnError: false }).jpeg();
-        imgData = `data:jpeg;base64,${(await jpeg.toBuffer()).toString('base64')}`;
       }
       return await this.pup(
         ({ groupId, imgData }) => WAPI.setGroupIcon(groupId, imgData),
@@ -2912,31 +2831,7 @@ public async getStatus(contactId: ContactId) : Promise<{
         stickerMetadata
       })
     }
-    const sharp = optionalRequire('sharp',  "Missing peer dependency: npm i sharp");
-    if(!sharp) return false;
-    const buff = Buffer.from(image.replace(/^data:image\/(png|gif|jpeg|webp);base64,/,''), 'base64');
-    const mimeInfo = base64MimeType(image);
-    if(mimeInfo?.includes("image")){
-      let webpBase64 = image;
-      let metadata : any = { width: 512, height: 512 };
-      if(!mimeInfo?.includes('webp')) {
-        const { pages } = await sharp(buff).metadata();
-      //@ts-ignore
-      let webp = sharp(buff,{ failOnError: false, animated: !!pages}).webp();
-      // eslint-disable-next-line no-extra-boolean-cast
-      if(!!!pages) webp = webp.resize(metadata);
-      metadata = await webp.metadata();
-      metadata.animated = !!pages;
-      webpBase64 = (await webp.toBuffer()).toString('base64');
-      return {
-        metadata,
-        webpBase64
-      }
-      }
-    } else {
-      console.log('Not an image');
-      return false;
-    }
+   
   }
 
   /**
@@ -2973,10 +2868,7 @@ public async getStatus(contactId: ContactId) : Promise<{
   }
 
   /**
-   * [ALPHA]
    * Use this to send an mp4 file as a sticker. This can also be used to convert GIFs from the chat because GIFs in WA are actually tiny mp4 files.
-   * 
-   * You need to make sure you have ffmpeg (with libwebp) installed for this to work.
    * 
    * @param to ChatId The chat id you want to send the webp sticker to
    * @param file [[DataURL]], [[Base64]], URL (string GET), Relative filepath (string), or Buffer of the mp4 file
@@ -3007,7 +2899,7 @@ public async getStatus(contactId: ContactId) : Promise<{
           processOptions,
           stickerMetadata
         })
-      } else convertedStickerDataUrl = await convertMp4BufferToWebpDataUrl(file, processOptions);
+      } 
     try {
       if(!convertedStickerDataUrl) return false;
       return await (messageId && this._createConfig.licenseKey) ? this.sendRawWebpAsStickerAsReply(to, messageId, convertedStickerDataUrl, true) : this.sendRawWebpAsSticker(to, convertedStickerDataUrl, true);
