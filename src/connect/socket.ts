@@ -1,6 +1,8 @@
+import { EventEmitter2 } from 'eventemitter2';
 import { io, Socket } from "socket.io-client";
 import { Client } from "../api/Client";
 import { SimpleListener } from "../api/model/events";
+import { v4 as uuidv4 } from 'uuid';
 
 /**
  * A convenience type that includes all keys from the `Client`.
@@ -55,7 +57,15 @@ export class SocketClient {
     url: string;
     apiKey: string;
     socket: Socket;
-    listeners: any = {};
+    /**
+     * A local version of the `ev` EventEmitter2
+     */
+    ev : EventEmitter2;
+    listeners: {
+        [listener in SimpleListener] ?: {
+            [id : string] : (data: any) => any
+        }
+    } = {};
 
     /**
      * The main way to create the socket baed client.
@@ -74,7 +84,7 @@ export class SocketClient {
         })
     }
 
-    constructor(url: string, apiKey?: string) {
+    constructor(url: string, apiKey?: string, ev ?: boolean) {
         this.url = url;
         this.apiKey = apiKey
         const _url = new URL(url)
@@ -86,10 +96,21 @@ export class SocketClient {
           },
           path: _path ? `${_path}/socket.io/` : undefined
         });
+        if(ev)
+        this.socket.on("connect", () => {
+            if(!this.ev) this.ev = new EventEmitter2({
+                wildcard:true
+            })
+            this.socket.emit("register_ev");
+            this.socket.onAny((event, value)=>this.ev.emit(event, value))
+        });
         this.socket.io.on("reconnect", async () => {
             console.log("Reconnected!!")
             console.log(Object.keys(this.listeners))
-            await Promise.all(Object.keys(this.listeners).map((listener: SimpleListener) => this.listen(listener, this.listeners[listener])))
+            await Promise.all(Object.keys(this.listeners).map(async (listener: SimpleListener) => {
+            await this.ask(listener)
+            this.socket.on(listener, async data => await Promise.all(Object.entries(this.listeners[listener]).map(([, callback]) => callback(data))))
+            }))
         })
         this.socket.io.on("reconnect_attempt", () => console.log("Reconnecting..."));
         this.socket.on("disconnect", () => console.log("Disconnected from host!"))
@@ -117,11 +138,37 @@ export class SocketClient {
         })
     }
 
-    public async listen(listener: SimpleListener, callback: (data: unknown) => void): Promise<boolean> {
+    /**
+     * Set a callback on a simple listener
+     * @param listener The listener name (e.g onMessage, onAnyMessage, etc.)
+     * @param callback The callback you need to run on the selected listener
+     * @returns The id of the callback
+     */
+    public async listen(listener: SimpleListener, callback: (data: unknown) => void): Promise<string> {
         // if (!this.socket.connected) throw new Error("Socket not connected!")
-        await this.ask(listener)
-        if (!this.listeners[listener]) this.socket.on(listener, callback)
-        this.listeners[listener] = callback;
-        return true
+        const id = uuidv4()
+        if (!this.listeners[listener]) {
+            this.listeners[listener] = {};
+            await this.ask(listener)
+            this.socket.on(listener, async data => await Promise.all(Object.entries(this.listeners[listener]).map(([, callback]) => callback(data))))
+        }
+        this.listeners[listener][id] = callback;
+        return id
     }
+
+    /**
+     * Discard a callback
+     * 
+     * @param listener The listener name (e.g onMessage, onAnyMessage, etc.)
+     * @param callbackId The ID from `listen`
+     * @returns boolean - true if the callback was found and discarded, false if the callback is not found
+     */
+    public stopListener(listener: SimpleListener, callbackId : string) : boolean {
+        if(this.listeners[listener][callbackId]) {
+            delete this.listeners[listener][callbackId];
+            return true
+        }
+        return false;
+    }
+
 }
