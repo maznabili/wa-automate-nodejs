@@ -36,6 +36,7 @@ import PriorityQueue from 'p-queue/dist/priority-queue';
 import { MessagePreprocessors } from '../structures/preProcessors';
 import { NextFunction, Request, Response } from 'express';
 import { base64MimeType, getDUrl, isBase64, isDataURL } from '../utils/tools';
+import { Call } from './model/call';
 
 /** @ignore */
 const pkg = readJsonSync(path.join(__dirname,'../../package.json')),
@@ -82,6 +83,7 @@ declare module WAPI {
   const onStory: (callback: Function) => any;
   const setChatBackgroundColourHex: (hex: string) => boolean;
   const darkMode: (activate: boolean) => boolean;
+  const autoReject: (message: string) => boolean;
   const onParticipantsChanged: (groupId: string, callback: Function) => any;
   const _onParticipantsChanged: (groupId: string, callback: Function) => any;
   const onLiveLocation: (chatId: string, callback: Function) => any;
@@ -659,7 +661,7 @@ export class Client {
    * }
    * ```
    */
-  public async onStory(fn: (story: any) => void) : Promise<Listener | boolean> {
+  public async onStory(fn: (story: Message) => void) : Promise<Listener | boolean> {
     return this.registerListener(SimpleListener.Story, fn);
   }
 
@@ -669,7 +671,7 @@ export class Client {
    * @event 
    * @fires STATE observable sream of states
    */
-  public async onStateChanged(fn: (state: string) => void) : Promise<Listener | boolean> {
+  public async onStateChanged(fn: (state: STATE) => void) : Promise<Listener | boolean> {
     return this.registerListener(SimpleListener.StateChanged, fn);
   }
 
@@ -678,7 +680,7 @@ export class Client {
    * @event 
    * @returns Observable stream of call request objects
    */
-  public async onIncomingCall(fn: (call: any) => void) : Promise<Listener | boolean> {
+  public async onIncomingCall(fn: (call: Call) => void) : Promise<Listener | boolean> {
     return this.registerListener(SimpleListener.IncomingCall, fn);
   }
 
@@ -699,7 +701,7 @@ export class Client {
    * }
    * ```
    */
-  public async onChatState(fn: (chatState: any) => void) : Promise<Listener | boolean> {
+  public async onChatState(fn: (chatState: ChatState) => void) : Promise<Listener | boolean> {
     return this.registerListener(SimpleListener.ChatState, fn);
   }
 
@@ -2677,6 +2679,20 @@ public async getStatus(contactId: ContactId) : Promise<{
       activate
     ) as Promise<boolean>;
   }
+
+  /**
+   * [REQUIRES AN INSIDERS LICENSE-KEY](https://gum.co/open-wa?tier=Insiders%20Program)
+   * 
+   * Automatically reject calls on the host account device. Please note that the device that is calling you will continue to ring.
+   * 
+   * @param message optional message to send to the calling account when their call is detected and rejected
+   */
+  public async autoReject(message?: string) : Promise<boolean> {
+    return await this.pup(
+      (message) => WAPI.autoReject(message),
+      message
+    ) as Promise<boolean>;
+  }
   
 
   /**
@@ -3472,7 +3488,7 @@ public async getStatus(contactId: ContactId) : Promise<{
    */
    createMessageCollector(c : Message | ChatId | Chat, filter : (args: any[] | any ) => boolean | Promise<boolean>, options : CollectorOptions) : MessageCollector {
     const chatId : ChatId = ((c as Message)?.chat?.id || (c as Chat)?.id || c) as ChatId;
-    return new MessageCollector(this.getSessionId(), this.getInstanceId(), chatId, filter, options);
+    return new MessageCollector(this.getSessionId(), this.getInstanceId(), chatId, filter, options, ev);
    }
 }
 

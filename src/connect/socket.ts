@@ -3,6 +3,9 @@ import { io, Socket } from "socket.io-client";
 import { Client } from "../api/Client";
 import { SimpleListener } from "../api/model/events";
 import { v4 as uuidv4 } from 'uuid';
+import { Chat, ChatId, Message } from '..';
+import { MessageCollector } from '../structures/MessageCollector';
+import { CollectorFilter, CollectorOptions } from '../structures/Collector';
 
 /**
  * A convenience type that includes all keys from the `Client`.
@@ -73,8 +76,8 @@ export class SocketClient {
      * @param apiKey optional api key if set
      * @returns SocketClient
      */
-    static async connect(url: string, apiKey?: string): Promise<SocketClient & Client> {
-        const client = new this(url, apiKey)
+    static async connect(url: string, apiKey?: string, ev ?: boolean): Promise<SocketClient & Client> {
+        const client = new this(url, apiKey, ev)
         return await new Promise((resolve, reject) => {
             client.socket.on("connect", () => {
                 console.log("Connected!", client.socket.id)
@@ -83,6 +86,11 @@ export class SocketClient {
             client.socket.on("connect_error", reject);
         })
     }
+
+   public async createMessageCollector(c : Message | ChatId | Chat, filter : CollectorFilter, options : CollectorOptions) : Promise<MessageCollector> {
+    const chatId : ChatId = ((c as Message)?.chat?.id || (c as Chat)?.id || c) as ChatId;
+    return new MessageCollector(await this.ask('getSessionId') as string, await this.ask('getInstanceId') as string, chatId, filter, options, this.ev);
+   }
 
     constructor(url: string, apiKey?: string, ev ?: boolean) {
         this.url = url;
@@ -113,7 +121,27 @@ export class SocketClient {
             }))
         })
         this.socket.io.on("reconnect_attempt", () => console.log("Reconnecting..."));
-        this.socket.on("disconnect", () => console.log("Disconnected from host!"))
+        this.socket.on("disconnect", () => console.log("Disconnected from host!"));
+        return new Proxy(this, {
+            get: function get(target : SocketClient, prop : string) {
+                const o = Reflect.get(target, prop);
+                if(o) return o;
+                if (prop === 'then') {
+                  return Promise.prototype.then.bind(target);
+                }
+                if(prop.startsWith("on")) {
+                  return async (callback : (data: unknown) => void) => target.listen(prop as SimpleListener,callback)
+                } else {
+                  return async (...args : any[]) => {
+                    return target.ask(prop as keyof Client,args.length==1 && typeof args[0] == "object" ? {
+                      ...args[0]
+                    } : [
+                      ...args
+                    ] as any)
+                  }
+                }
+            }
+        }) as Client & SocketClient
     }
 
     //awaiting tuple label getter to reimplement this
@@ -121,7 +149,7 @@ export class SocketClient {
     //   [K in keyof Parameters<Pick<Client,M>[ M ]>]: Parameters<Pick<Client,M>[ M ]>[K]
     // }
 
-    public async ask<M extends ClientMethods, P extends Parameters<Pick<Client, M>[M]>>(method: M, args?: P | {
+    public async ask<M extends ClientMethods, P extends Parameters<Pick<Client, M>[M]>>(method: M, args?: any[] | P | {
         [k: string]: unknown
     }): Promise<unknown> {
         // if (!this.socket.connected) return new Error("Socket not connected!")

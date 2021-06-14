@@ -182,6 +182,23 @@ const optionList:
         description: "The license key you want to use for this server. License keys are used to unlock features. Learn more here https://github.com/open-wa/wa-automate-nodejs#license-key"
     },
     {
+        name: 'ready-webhook',
+        type: String,
+        typeLabel: '{yellow {underline https://webhook.site/....}}',
+        description: "Webhook that fires when the EASY API is completely ready"
+    },
+    {
+        name: 'on-call',
+        type: String,
+        typeLabel: '{yellow {underline "Please do not call this number"}}',
+        description: "A default message to send to any number that is trying to call the host account"
+    },
+    {
+        name: 'auto-reject',
+        type: Boolean,
+        description: "Automatically reject incoming phone and video calls to the host account."
+    },
+    {
         name: 'help',
         description: 'Print this usage guide.'
     }
