@@ -1,7 +1,7 @@
 import { default as mime } from 'mime-types';
 import { Page, EvaluateFn } from 'puppeteer';
 import { Chat, LiveLocationChangedEvent, ChatState, ChatMuteDuration, GroupChatCreationResponse } from './model/chat';
-import { Contact } from './model/contact';
+import { Contact, NumberCheck } from './model/contact';
 import { Message } from './model/message';
 import { default as axios, AxiosRequestConfig} from 'axios';
 import { ParticipantChangedEventModel } from './model/group-metadata';
@@ -24,11 +24,11 @@ import { isAuthenticated } from '../controllers/auth';
 import { ChatId, GroupChatId, Content, Base64, MessageId, ContactId, DataURL, FilePath } from './model/aliases';
 import { bleachMessage, decryptMedia } from '@open-wa/wa-decrypt';
 import * as path from 'path';
-import { CustomProduct, Label } from './model/product';
+import { CustomProduct, Label, Order } from './model/product';
 import { defaultProcessOptions, Mp4StickerConversionProcessOptions, StickerMetadata } from './model/media';
 import { getAndInjectLicense, getAndInjectLivePatch, getLicense } from '../controllers/initializer';
 import { SimpleListener } from './model/events';
-import { CollectorOptions } from '../structures/Collector';
+import { AwaitMessagesOptions, Collection, CollectorFilter, CollectorOptions } from '../structures/Collector';
 import { MessageCollector } from '../structures/MessageCollector';
 import { injectInitPatch } from '../controllers/init_patch';
 import { Listener } from 'eventemitter2';
@@ -75,6 +75,7 @@ declare module WAPI {
   const addAllNewMessagesListener: (callback: Function) => void;
   const onStateChanged: (callback: Function) => void;
   const onChatState: (callback: Function) => any;
+  const onOrder: (callback: Function) => any;
   const onIncomingCall: (callback: Function) => any;
   const onAddedToGroup: (callback: Function) => any;
   const onBattery: (callback: Function) => any;
@@ -105,6 +106,7 @@ declare module WAPI {
   const addParticipant: (groupId: string, contactId: string) => Promise<boolean | string>;
   const sendGiphyAsSticker: (chatId: string, url: string) => Promise<any>;
   const getMessageById: (mesasgeId: string) => Message;
+  const getOrder: (id: string) => Order;
   const getMyLastMessage: (chatId: string) => Promise<Message>;
   const getStickerDecryptable: (mesasgeId: string) => Message | boolean;
   const forceStaleMediaUpdate: (mesasgeId: string) => Message | boolean;
@@ -683,6 +685,16 @@ export class Client {
   public async onIncomingCall(fn: (call: Call) => void) : Promise<Listener | boolean> {
     return this.registerListener(SimpleListener.IncomingCall, fn);
   }
+
+  /**
+   *[REQUIRES AN INSIDERS LICENSE-KEY](https://gum.co/open-wa?tier=Insiders%20Program)
+   * 
+   * Listens to new orders. Only works on business accounts
+   */
+  public async onOrder(fn: (order: Order) => void) : Promise<Listener | boolean> {
+    return this.registerListener(SimpleListener.Order, fn);
+  }
+
 
   /**
    * [REQUIRES AN INSIDERS LICENSE-KEY](https://gum.co/open-wa?tier=Insiders%20Program)
@@ -2064,6 +2076,20 @@ public async contactUnblock(id: ContactId) : Promise<boolean> {
   }
 
   /**
+   * [REQUIRES AN INSIDERS LICENSE-KEY](https://gum.co/open-wa?tier=Insiders%20Program)
+   * 
+   * Retrieves an order object
+   * @param messageId or OrderId
+   * @returns order object
+   */
+   public async getOrder(id: MessageId | string) : Promise<Order> {
+    return await this.pup(
+      id => WAPI.getOrder(id),
+      id
+    ) as Promise<Order>;
+  }
+
+  /**
    * Retrieves the last message sent by the host account in any given chat or globally.
    * @param chatId This is optional. If no chat Id is set then the last message sent by the host account will be returned.
    * @returns message object
@@ -2342,9 +2368,8 @@ public async getStatus(contactId: ContactId) : Promise<{
   /**
    * Checks if a number is a valid WA number
    * @param contactId, you need to include the @c.us at the end.
-   * @returns contact detial as promise
    */
-  public async checkNumberStatus(contactId: ContactId) : Promise<Contact>{
+  public async checkNumberStatus(contactId: ContactId) : Promise<NumberCheck>{
     return await this.pup(
       contactId => WAPI.checkNumberStatus(contactId),
       contactId
@@ -3271,7 +3296,12 @@ public async getStatus(contactId: ContactId) : Promise<{
       const rb = req?.body || {};
       let {args} = rb
       const m = rb?.method || this._createConfig.sessionId && this._createConfig.sessionId!== 'session' && req.path.includes(this._createConfig.sessionId) ? req.path.replace(`/${this._createConfig.sessionId}/`,'') :  req.path.replace('/','');
-      if(args && !Array.isArray(args)) args = parseFunction().parse(this[m]).args.map(argName=> args[argName]);
+      let methodRequiresArgs = false
+      if(args && !Array.isArray(args)) {
+        const methodArgs = parseFunction().parse(this[m]).args
+        if(methodArgs?.length > 0) methodRequiresArgs = true;
+        args = methodArgs.map(argName=> args[argName]);
+      }
       else if(!args) args = [];
       if(this[m]){
         try {
@@ -3284,6 +3314,7 @@ public async getStatus(contactId: ContactId) : Promise<{
         })
         } catch (error) {
         console.error("middleware -> error", error)
+        if(methodRequiresArgs && args==[]) error.message = `${req?.params ? "Please set arguments in request json body, not in params." : "Args expected, none found."} ${error.message}`
         return res.send({
           success:false,
           error : {
@@ -3486,10 +3517,42 @@ public async getStatus(contactId: ContactId) : Promise<{
    * @param filter A function that consumes a [Message] and returns a boolean which determines whether or not the message shall be collected.
    * @param options The options for the collector. For example, how long the collector shall run for, how many messages it should collect, how long between messages before timing out, etc.
    */
-   createMessageCollector(c : Message | ChatId | Chat, filter : (args: any[] | any ) => boolean | Promise<boolean>, options : CollectorOptions) : MessageCollector {
+   createMessageCollector(c : Message | ChatId | Chat, filter : CollectorFilter<[Message]>, options : CollectorOptions) : MessageCollector {
     const chatId : ChatId = ((c as Message)?.chat?.id || (c as Chat)?.id || c) as ChatId;
     return new MessageCollector(this.getSessionId(), this.getInstanceId(), chatId, filter, options, ev);
    }
+
+  /**
+   * [FROM DISCORDJS]
+   * Similar to createMessageCollector but in promise form.
+   * Resolves with a collection of messages that pass the specified filter.
+   * @param c The Mesasge/Chat or Chat Id to base this message colletor on
+   * @param {CollectorFilter} filter The filter function to use
+   * @param {AwaitMessagesOptions} [options={}] Optional options to pass to the internal collector
+   * @returns {Promise<Collection<string, Message>>}
+   * @example
+   * ```javascript
+   * // Await !vote messages
+   * const filter = m => m.body.startsWith('!vote');
+   * // Errors: ['time'] treats ending because of the time limit as an error
+   * channel.awaitMessages(filter, { max: 4, time: 60000, errors: ['time'] })
+   *   .then(collected => console.log(collected.size))
+   *   .catch(collected => console.log(`After a minute, only ${collected.size} out of 4 voted.`));
+   * ```
+   */
+   awaitMessages(c : Message | ChatId | Chat, filter : CollectorFilter<[Message]>, options : AwaitMessagesOptions = {}) : Promise<Collection<string,Message>> {
+    return new Promise((resolve, reject) => {
+       const collector = this.createMessageCollector(c, filter, options);
+       collector.once('end', (collection, reason) => {
+         if (options.errors && options.errors.includes(reason)) {
+           reject(collection);
+         } else {
+           resolve(collection);
+         }
+       });
+     });
+   }
+
 }
 
 export { useragent } from '../config/puppeteer.config'

@@ -3,7 +3,7 @@
 <head>
 	<meta charset="utf-8">
 	<meta http-equiv="X-UA-Compatible" content="IE=edge">
-	<title>ChatTypes | @open-wa/wa-automate - v4.7.1</title>
+	<title>AwaitMessagesOptions | @open-wa/wa-automate - v4.7.1</title>
 	<meta name="description" content="Documentation for @open-wa/wa-automate - v4.7.1">
 	<meta name="viewport" content="width=device-width, initial-scale=1">
 	<link rel="stylesheet" href="../assets/css/main.css">
@@ -65,67 +65,128 @@
 					<a href="../modules.html">Globals</a>
 				</li>
 				<li>
-					<a href="../modules/api_model_chat.html">api/model/chat</a>
+					<a href="../modules/structures_collector.html">structures/Collector</a>
 				</li>
 				<li>
-					<a href="api_model_chat.chattypes.html">ChatTypes</a>
+					<a href="structures_collector.awaitmessagesoptions.html">AwaitMessagesOptions</a>
 				</li>
 			</ul>
-			<h1>Enumeration ChatTypes</h1>
+			<h1>Interface AwaitMessagesOptions</h1>
 		</div>
 	</div>
 </header>
 <div class="container container-main">
 	<div class="row">
 		<div class="col-8 col-content">
-			<section class="tsd-panel tsd-comment">
-				<div class="tsd-comment tsd-typography">
-					<div class="lead">
-						<p>Chat types</p>
-					</div>
-					<dl class="tsd-comment-tags">
-						<dt>readonly</dt>
-						<dd></dd>
-					</dl>
-				</div>
+			<section class="tsd-panel tsd-hierarchy">
+				<h3>Hierarchy</h3>
+				<ul class="tsd-hierarchy">
+					<li>
+						<a href="structures_collector.collectoroptions.html" class="tsd-signature-type" data-tsd-kind="Interface">CollectorOptions</a>
+						<ul class="tsd-hierarchy">
+							<li>
+								<span class="target">AwaitMessagesOptions</span>
+							</li>
+						</ul>
+					</li>
+				</ul>
 			</section>
 			<section class="tsd-panel-group tsd-index-group">
 				<h2>Index</h2>
 				<section class="tsd-panel tsd-index-panel">
 					<div class="tsd-index-content">
 						<section class="tsd-index-section ">
-							<h3>Enumeration members</h3>
+							<h3>Properties</h3>
 							<ul class="tsd-index-list">
-								<li class="tsd-kind-enum-member tsd-parent-kind-enum"><a href="api_model_chat.chattypes.html#group" class="tsd-kind-icon">GROUP</a></li>
-								<li class="tsd-kind-enum-member tsd-parent-kind-enum"><a href="api_model_chat.chattypes.html#solo" class="tsd-kind-icon">SOLO</a></li>
-								<li class="tsd-kind-enum-member tsd-parent-kind-enum"><a href="api_model_chat.chattypes.html#unknown" class="tsd-kind-icon">UNKNOWN</a></li>
+								<li class="tsd-kind-property tsd-parent-kind-interface tsd-is-inherited"><a href="structures_collector.awaitmessagesoptions.html#dispose" class="tsd-kind-icon">dispose</a></li>
+								<li class="tsd-kind-property tsd-parent-kind-interface"><a href="structures_collector.awaitmessagesoptions.html#errors" class="tsd-kind-icon">errors</a></li>
+								<li class="tsd-kind-property tsd-parent-kind-interface tsd-is-inherited"><a href="structures_collector.awaitmessagesoptions.html#idle" class="tsd-kind-icon">idle</a></li>
+								<li class="tsd-kind-property tsd-parent-kind-interface tsd-is-inherited"><a href="structures_collector.awaitmessagesoptions.html#max" class="tsd-kind-icon">max</a></li>
+								<li class="tsd-kind-property tsd-parent-kind-interface tsd-is-inherited"><a href="structures_collector.awaitmessagesoptions.html#maxprocessed" class="tsd-kind-icon">max<wbr>Processed</a></li>
+								<li class="tsd-kind-property tsd-parent-kind-interface tsd-is-inherited"><a href="structures_collector.awaitmessagesoptions.html#time" class="tsd-kind-icon">time</a></li>
 							</ul>
 						</section>
 					</div>
 				</section>
 			</section>
 			<section class="tsd-panel-group tsd-member-group ">
-				<h2>Enumeration members</h2>
-				<section class="tsd-panel tsd-member tsd-kind-enum-member tsd-parent-kind-enum">
-					<a name="group" class="tsd-anchor"></a>
-					<h3>GROUP</h3>
-					<div class="tsd-signature tsd-kind-icon">GROUP<span class="tsd-signature-symbol">:</span> <span class="tsd-signature-symbol"> = &quot;group&quot;</span></div>
+				<h2>Properties</h2>
+				<section class="tsd-panel tsd-member tsd-kind-property tsd-parent-kind-interface tsd-is-inherited">
+					<a name="dispose" class="tsd-anchor"></a>
+					<h3><span class="tsd-flag ts-flagOptional">Optional</span> dispose</h3>
+					<div class="tsd-signature tsd-kind-icon">dispose<span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span></div>
 					<aside class="tsd-sources">
+						<p>Inherited from <a href="structures_collector.collectoroptions.html">CollectorOptions</a>.<a href="structures_collector.collectoroptions.html#dispose">dispose</a></p>
 					</aside>
+					<div class="tsd-comment tsd-typography">
+						<div class="lead">
+							<p> Whether to dispose data when it&#39;s deleted</p>
+						</div>
+					</div>
 				</section>
-				<section class="tsd-panel tsd-member tsd-kind-enum-member tsd-parent-kind-enum">
-					<a name="solo" class="tsd-anchor"></a>
-					<h3>SOLO</h3>
-					<div class="tsd-signature tsd-kind-icon">SOLO<span class="tsd-signature-symbol">:</span> <span class="tsd-signature-symbol"> = &quot;solo&quot;</span></div>
+				<section class="tsd-panel tsd-member tsd-kind-property tsd-parent-kind-interface">
+					<a name="errors" class="tsd-anchor"></a>
+					<h3><span class="tsd-flag ts-flagOptional">Optional</span> errors</h3>
+					<div class="tsd-signature tsd-kind-icon">errors<span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">[]</span></div>
 					<aside class="tsd-sources">
 					</aside>
+					<div class="tsd-comment tsd-typography">
+						<div class="lead">
+							<p>An array of &quot;reasons&quot; that would result in the awaitMessages command to throw an error.</p>
+						</div>
+					</div>
 				</section>
-				<section class="tsd-panel tsd-member tsd-kind-enum-member tsd-parent-kind-enum">
-					<a name="unknown" class="tsd-anchor"></a>
-					<h3>UNKNOWN</h3>
-					<div class="tsd-signature tsd-kind-icon">UNKNOWN<span class="tsd-signature-symbol">:</span> <span class="tsd-signature-symbol"> = &quot;unknown&quot;</span></div>
+				<section class="tsd-panel tsd-member tsd-kind-property tsd-parent-kind-interface tsd-is-inherited">
+					<a name="idle" class="tsd-anchor"></a>
+					<h3><span class="tsd-flag ts-flagOptional">Optional</span> idle</h3>
+					<div class="tsd-signature tsd-kind-icon">idle<span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span></div>
 					<aside class="tsd-sources">
+						<p>Inherited from <a href="structures_collector.collectoroptions.html">CollectorOptions</a>.<a href="structures_collector.collectoroptions.html#idle">idle</a></p>
 					</aside>
+					<div class="tsd-comment tsd-typography">
+						<div class="lead">
+							<p>Max time allowed idle</p>
+						</div>
+					</div>
+				</section>
+				<section class="tsd-panel tsd-member tsd-kind-property tsd-parent-kind-interface tsd-is-inherited">
+					<a name="max" class="tsd-anchor"></a>
+					<h3><span class="tsd-flag ts-flagOptional">Optional</span> max</h3>
+					<div class="tsd-signature tsd-kind-icon">max<span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span></div>
+					<aside class="tsd-sources">
+						<p>Inherited from <a href="structures_collector.collectoroptions.html">CollectorOptions</a>.<a href="structures_collector.collectoroptions.html#max">max</a></p>
+					</aside>
+					<div class="tsd-comment tsd-typography">
+						<div class="lead">
+							<p> The maximum amount of items to collect</p>
+						</div>
+					</div>
+				</section>
+				<section class="tsd-panel tsd-member tsd-kind-property tsd-parent-kind-interface tsd-is-inherited">
+					<a name="maxprocessed" class="tsd-anchor"></a>
+					<h3><span class="tsd-flag ts-flagOptional">Optional</span> max<wbr>Processed</h3>
+					<div class="tsd-signature tsd-kind-icon">max<wbr>Processed<span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span></div>
+					<aside class="tsd-sources">
+						<p>Inherited from <a href="structures_collector.collectoroptions.html">CollectorOptions</a>.<a href="structures_collector.collectoroptions.html#maxprocessed">maxProcessed</a></p>
+					</aside>
+					<div class="tsd-comment tsd-typography">
+						<div class="lead">
+							<p>The maximum amount of items to process</p>
+						</div>
+					</div>
+				</section>
+				<section class="tsd-panel tsd-member tsd-kind-property tsd-parent-kind-interface tsd-is-inherited">
+					<a name="time" class="tsd-anchor"></a>
+					<h3><span class="tsd-flag ts-flagOptional">Optional</span> time</h3>
+					<div class="tsd-signature tsd-kind-icon">time<span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span></div>
+					<aside class="tsd-sources">
+						<p>Inherited from <a href="structures_collector.collectoroptions.html">CollectorOptions</a>.<a href="structures_collector.collectoroptions.html#time">time</a></p>
+					</aside>
+					<div class="tsd-comment tsd-typography">
+						<div class="lead">
+							<p>Max time to wait for items in milliseconds</p>
+						</div>
+					</div>
 				</section>
 			</section>
 		</div>
@@ -208,26 +269,17 @@
 						<a href="../modules.html">Modules</a>
 					</li>
 					<li class="current tsd-kind-module">
-						<a href="../modules/api_model_chat.html">api/model/chat</a>
+						<a href="../modules/structures_collector.html">structures/<wbr>Collector</a>
 					</li>
 				</ul>
 			</nav>
 			<nav class="tsd-navigation secondary menu-sticky">
 				<ul class="before-current">
-					<li class=" tsd-kind-enum tsd-parent-kind-module">
-						<a href="api_model_chat.chatmuteduration.html" class="tsd-kind-icon">Chat<wbr>Mute<wbr>Duration</a>
+					<li class=" tsd-kind-class tsd-parent-kind-module">
+						<a href="../classes/structures_collector.collector.html" class="tsd-kind-icon">Collector</a>
 					</li>
 					<li class=" tsd-kind-interface tsd-parent-kind-module">
-						<a href="../interfaces/api_model_chat.chat.html" class="tsd-kind-icon">Chat</a>
-					</li>
-					<li class=" tsd-kind-interface tsd-parent-kind-module">
-						<a href="../interfaces/api_model_chat.groupchatcreationparticipantaddresponse.html" class="tsd-kind-icon">Group<wbr>Chat<wbr>Creation<wbr>Participant<wbr>Add<wbr>Response</a>
-					</li>
-					<li class=" tsd-kind-interface tsd-parent-kind-module">
-						<a href="../interfaces/api_model_chat.groupchatcreationresponse.html" class="tsd-kind-icon">Group<wbr>Chat<wbr>Creation<wbr>Response</a>
-					</li>
-					<li class=" tsd-kind-interface tsd-parent-kind-module">
-						<a href="../interfaces/api_model_chat.livelocationchangedevent.html" class="tsd-kind-icon">Live<wbr>Location<wbr>Changed<wbr>Event</a>
+						<a href="structures_collector.collectoroptions.html" class="tsd-kind-icon">Collector<wbr>Options</a>
 					</li>
 				</ul>
 			</nav>
@@ -245,14 +297,15 @@
 				<li class="tsd-kind-type-alias tsd-has-type-parameter"><span class="tsd-kind-icon">Type alias with type parameter</span></li>
 			</ul>
 			<ul class="tsd-legend">
+				<li class="tsd-kind-interface"><span class="tsd-kind-icon">Interface</span></li>
+				<li class="tsd-kind-property tsd-parent-kind-interface"><span class="tsd-kind-icon">Property</span></li>
+			</ul>
+			<ul class="tsd-legend">
 				<li class="tsd-kind-class"><span class="tsd-kind-icon">Class</span></li>
 				<li class="tsd-kind-class tsd-has-type-parameter"><span class="tsd-kind-icon">Class with type parameter</span></li>
 			</ul>
 			<ul class="tsd-legend">
 				<li class="tsd-kind-enum"><span class="tsd-kind-icon">Enumeration</span></li>
-			</ul>
-			<ul class="tsd-legend">
-				<li class="tsd-kind-interface"><span class="tsd-kind-icon">Interface</span></li>
 			</ul>
 		</div>
 	</div>

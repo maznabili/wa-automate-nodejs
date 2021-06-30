@@ -21,7 +21,7 @@ export class Collection<K, V> extends BaseCollection<K, V> {
  * @param {Collection} collection The items collected by this collector
  * @returns {boolean|Promise<boolean>}
  */
-export type CollectorFilter = (args: any[]) => boolean | Promise<boolean>
+export type CollectorFilter<T extends any[]> = (...args: T) => boolean | Promise<boolean>
 
 /**
  * Options to be applied to the collector.
@@ -47,6 +47,13 @@ export interface CollectorOptions {
    *  Whether to dispose data when it's deleted
    */
   dispose?: boolean
+}
+
+export interface AwaitMessagesOptions extends CollectorOptions {
+  /**
+   * An array of "reasons" that would result in the awaitMessages command to throw an error.
+   */
+  errors?: string[];
 }
 
 /**
@@ -83,7 +90,7 @@ export class Collector extends EventEmitter {
   protected _immediates: Set<NodeJS.Immediate> = new Set();
 
 
-  constructor(filter: CollectorFilter, options: CollectorOptions = {}) {
+  constructor(filter: CollectorFilter<any>, options: CollectorOptions = {}) {
     super();
 
     /**
