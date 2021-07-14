@@ -73,7 +73,7 @@ export async function smartQr(waPage: Page, config?: ConfigObject, spinner ?: Sp
   if(isAuthed) return true;
   const grabAndEmit = async (qrData) => {
     try {
-      const qrCode = await waPage.evaluate(`getQrPng()`);
+      const qrCode = await waPage.evaluate(`window.getQrPng()`);
       if(qrCode) {
         qrEv.emit(qrCode);
         if(!config.qrLogSkip) qrcode.generate(qrData,{small: true});
@@ -82,6 +82,8 @@ export async function smartQr(waPage: Page, config?: ConfigObject, spinner ?: Sp
         spinner.info("Something went wrong while retreiving new the QR code but it should not affect the session launch procedure.")
       }
     } catch (error) {
+      //@ts-ignore
+      console.log(await waPage.evaluate("window.launchres"))
       spinner.info(`Something went wrong while retreiving new the QR code but it should not affect the session launch procedure: ${error.message}`)
     }
   }

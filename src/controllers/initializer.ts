@@ -152,7 +152,7 @@ export async function create(config: ConfigObject = {}): Promise<Client> {
     //@ts-ignore
     const WA_VERSION = await waPage.evaluate(() => window.Debug ? window.Debug.VERSION : 'I think you have been TOS_BLOCKed')
     //@ts-ignore
-    const canInjectEarly = await waPage.evaluate(() => { return (typeof webpackChunkbuild !== "undefined") });
+    const canInjectEarly = await waPage.evaluate(() => { if(window.webpackChunkwhatsapp_web_client) {window.webpackChunkbuild = window.webpackChunkwhatsapp_web_client} else {(function(){const f = Object.entries(window).filter(([,o])=>o && o.push && (o.push != [].push));if(f[0]) {window.webpackChunkbuild = window[f[0][0]]}})()} return (typeof webpackChunkbuild !== "undefined") });
     let debugInfo : SessionInfo = {
       WA_VERSION,
       PAGE_UA,
@@ -163,11 +163,9 @@ export async function create(config: ConfigObject = {}): Promise<Client> {
     };
     if(config?.logDebugInfoAsObject || config?.disableSpins) spinner.succeed(`Debug info: ${JSON.stringify(debugInfo, null, 2)}`);
      else console.table(debugInfo);
+     // eslint-disable-next-line @typescript-eslint/no-unused-vars
+     spinner.succeed('Use this easy pre-filled link to report an issue: ' + `https://github.com/open-wa/wa-automate-nodejs/issues/new?template=bug_report.yaml&debug_info=${encodeURI(JSON.stringify((({ OS, PAGE_UA, ...o }) => o)(debugInfo) ,null,2))}&environment=${`-%20OS:%20${encodeURI(debugInfo.OS)}%0A-%20Node:%20${encodeURI(process.versions.node)}%0A-%20npm:%20%0A`}`);
 
-    /**
-     * Attempt to preload patches
-     */
-    const patchPromise = getPatch(config, spinner)
     if (canInjectEarly) {
       spinner.start('Injecting api');
       waPage = await injectApi(waPage);
@@ -251,6 +249,10 @@ export async function create(config: ConfigObject = {}): Promise<Client> {
     //@ts-ignore
     const VALID_SESSION = await waPage.evaluate(() => window.Store && window.Store.Msg ? true : false);
     if (VALID_SESSION) {
+      /**
+       * Session is valid, attempt to preload patches
+       */
+      const patchPromise = getPatch(config, spinner, debugInfo)
       spinner.succeed('Client is ready');
       const localStorage = JSON.parse(await waPage.evaluate(() => {
         return JSON.stringify(window.localStorage);
@@ -292,7 +294,7 @@ export async function create(config: ConfigObject = {}): Promise<Client> {
       }
       //patch issues with wapi.js
       if (!config?.skipPatches){
-        await getAndInjectLivePatch(waPage,spinner, await patchPromise)
+        await getAndInjectLivePatch(waPage,spinner, await patchPromise, config, debugInfo)
         debugInfo.OW_KEY = await waPage.evaluate(`window.o()`);
       }
       if (config?.skipBrokenMethodsCheck !== true) await integrityCheck(waPage, notifier, spinner, debugInfo);
@@ -349,7 +351,7 @@ const kill = async (p) => {
  * @private
  */
 
-export async function getPatch(config: ConfigObject, spinner ?: Spin) : Promise<{
+export async function getPatch(config: ConfigObject, spinner ?: Spin, sessionInfo ?: SessionInfo) : Promise<{
   data: any,
   tag: string
 }> {
@@ -358,9 +360,10 @@ export async function getPatch(config: ConfigObject, spinner ?: Spin) : Promise<
   /**
    * Undo below comment when a githack alternative is found.
    */
-  const patchesUrl = config?.cachedPatch ?  ghUrl : pkg.patches
+  const patchesBaseUrl = config?.cachedPatch ?  ghUrl : pkg.patches
+  const patchesUrl = patchesBaseUrl + `?wv=${sessionInfo.WA_VERSION}&wav=${sessionInfo.WA_AUTOMATE_VERSION}`
   if(!spinner) spinner = new Spin(config.sessionId, "FETCH_PATCH", config.disableSpins,true)
-  spinner?.start(`Downloading ${config?.cachedPatch ? 'cached ': ''}patches from ${patchesUrl}`, hasSpin ? undefined : 2)
+  spinner?.start(`Downloading ${config?.cachedPatch ? 'cached ': ''}patches from ${patchesBaseUrl}`, hasSpin ? undefined : 2)
   if(!axios) axios = await import('axios');
   const START = Date.now();
   const { data, headers } = await axios.get(patchesUrl).catch(()=>{
@@ -400,9 +403,9 @@ export async function injectLivePatch(page: Page, patch : {
 export async function getAndInjectLivePatch(page: Page, spinner ?: Spin, preloadedPatch ?: {
   data: any,
   tag: string
-}) : Promise<void> {
+}, config ?: ConfigObject, sessionInfo ?: SessionInfo) : Promise<void> {
   let patch = preloadedPatch;
-  if(!patch) patch = await getPatch(spinner)
+  if(!patch) patch = await getPatch(config, spinner, sessionInfo)
   await injectLivePatch(page, patch, spinner)
 }
 

@@ -24,7 +24,7 @@ import { isAuthenticated } from '../controllers/auth';
 import { ChatId, GroupChatId, Content, Base64, MessageId, ContactId, DataURL, FilePath } from './model/aliases';
 import { bleachMessage, decryptMedia } from '@open-wa/wa-decrypt';
 import * as path from 'path';
-import { CustomProduct, Label, Order } from './model/product';
+import { CustomProduct, Label, Order, Product } from './model/product';
 import { defaultProcessOptions, Mp4StickerConversionProcessOptions, StickerMetadata } from './model/media';
 import { getAndInjectLicense, getAndInjectLivePatch, getLicense } from '../controllers/initializer';
 import { SimpleListener } from './model/events';
@@ -92,6 +92,7 @@ declare module WAPI {
   const sendMessage: (to: string, content: string) => Promise<string>;
   const setChatEphemeral: (chatId: string, ephemeral: boolean) => Promise<boolean>;
   const downloadFileWithCredentials: (url: string) => Promise<string>;
+  const sendPaymentRequest: (chatId : string, amount1000 : number, currency : string, noteMessage : string) => Promise<any>;
   const sendMessageWithMentions: (to: string, content: string, hideTags: boolean) => Promise<string>;
   const tagEveryone: (groupId: string, content: string, hideTags: boolean) => Promise<string>;
   const sendReplyWithMentions: (to: string, content: string, replyMessageId: string) => Promise<string>;
@@ -102,6 +103,7 @@ declare module WAPI {
   const reply: (to: string, content: string, quotedMsg: string | Message) => Promise<string|boolean>;
   const getGeneratedUserAgent: (userAgent?: string) => string;
   const forwardMessages: (to: string, messages: string | (string | Message)[], skipMyMessages: boolean) => any;
+  const createNewProduct : (name : string, price : number, currency : string, images : DataURL[], description : string, url ?: string, internalId ?: string, isHidden ?: boolean) => Promise<any>;
   const sendLocation: (to: string, lat: any, lng: any, loc: string) => Promise<string>;
   const addParticipant: (groupId: string, contactId: string) => Promise<boolean | string>;
   const sendGiphyAsSticker: (chatId: string, url: string) => Promise<any>;
@@ -208,7 +210,7 @@ declare module WAPI {
   const forceUpdateConnectionState: () => Promise<string>;
   const getBatteryLevel: () => number;
   const getIsPlugged: () => boolean;
-  const clearAllChats: () => Promise<boolean>;
+  const clearAllChats: (ts ?: number) => Promise<boolean>;
   const cutMsgCache: () => boolean;
   const cutChatCache: () => boolean;
   const deleteStaleChats: (startingFrom: number) => Promise<boolean>;
@@ -322,6 +324,7 @@ export class Client {
         this.onLogout(() => {
             if(this._createConfig?.deleteSessionDataOnLogout) deleteSessionData(this._createConfig)
             if(this._createConfig?.killClientOnLogout) {
+              console.log("Session logged out. Killing client")
               this.kill();
             }
         })
@@ -342,6 +345,7 @@ export class Client {
 
   private _setOnClose() : void {
     this._page.on('close',()=>{
+      console.log("Browser page has closed. Killing client")
       this.kill();
       if(this._createConfig?.killProcessOnBrowserClose) process.exit();
     })
@@ -1094,6 +1098,7 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
       let msg = res;
       if(res==err[1]) msg = `\n${res}. Unlock this feature and support open-wa by getting a license: ${await this.link()}\n`
       console.error(msg);
+      if(this._createConfig.onError == OnError.THROW)
       throw new CustomError(ERROR_NAME.SENDTEXT_FAILURE, msg)
     }
     return (err.includes(res) ? false : res)  as boolean | MessageId;
@@ -1121,6 +1126,24 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
         return WAPI.sendMessageWithMentions(to, content, hideTags);
       },
       { to, content, hideTags }
+    ) as Promise<boolean | MessageId>;
+  }
+
+  /** 
+   * [UNTESTED - REQUIRES FEEDBACK]
+   * Sends a payment request message to given chat
+   * 
+   * @param to chat id: `xxxxx@c.us`
+   * @param amount number the amount to request in 1000 format (e.g £10 => 10000)
+   * @param currency string The 3 letter currency code
+   * @param message string optional message to send with the payment request
+   */
+  public async sendPaymentRequest(to: ChatId, amount: number, currency : string, message?: string) : Promise<boolean | MessageId> {
+    return await this.pup(
+      ({ to, amount, currency, message }) => {
+        return WAPI.sendPaymentRequest(to, amount, currency, message);
+      },
+      { to, amount, currency, message }
     ) as Promise<boolean | MessageId>;
   }
 
@@ -2087,6 +2110,28 @@ public async contactUnblock(id: ContactId) : Promise<boolean> {
       id => WAPI.getOrder(id),
       id
     ) as Promise<Order>;
+  }
+
+  /**
+   * [REQUIRES AN INSIDERS LICENSE-KEY](https://gum.co/open-wa?tier=Insiders%20Program)
+   * 
+   * Add a product to your catalog
+   * 
+   * @param {string} name The name of the product
+   * @param {number} price The price of the product
+   * @param {string} currency The 3-letter currenct code for the product
+   * @param {string[]} images An array of dataurl or base64 strings of product images, the first image will be used as the main image. At least one image is required.
+   * @param {string} description optional, the description of the product
+   * @param {string} url The url of the product for more information
+   * @param {string} internalId The internal/backoffice id of the product
+   * @param {boolean} isHidden Whether or not the product is shown publicly in your catalog
+   * @returns product object
+   */
+   public async createNewProduct(name : string, price : number, currency : string, images : DataURL[], description : string, url ?: string, internalId ?: string, isHidden ?: boolean) : Promise<Product> {
+    return await this.pup(
+      ({name, price, currency, images, description, url, internalId, isHidden}) => WAPI.createNewProduct(name, price, currency, images, description, url, internalId, isHidden),
+      { name, price, currency, images, description, url, internalId, isHidden }
+    ) as Promise<Product>;
   }
 
   /**
@@ -3127,12 +3172,13 @@ public async getStatus(contactId: ContactId) : Promise<{
   
 
     /**
-     * [REQUIRES AN INSIDERS LICENSE-KEY](https://gum.co/open-wa?tier=Insiders%20Program)
-     * 
      * Clears all chats of all messages. This does not delete chats. Please be careful with this as it will remove all messages from whatsapp web and the host device. This feature is great for privacy focussed bots.
+     * 
+     * @param ts number A chat that has had a message after ts (epoch timestamp) will not be cleared.
+     *
      */
-  public async clearAllChats() : Promise<boolean> {
-    return await this.pup(() => WAPI.clearAllChats());
+  public async clearAllChats(ts ?: number) : Promise<boolean> {
+    return await this.pup(({ ts }) => WAPI.clearAllChats(ts), {ts});
   }
   
 
