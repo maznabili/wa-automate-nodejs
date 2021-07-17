@@ -37,6 +37,7 @@ import { MessagePreprocessors } from '../structures/preProcessors';
 import { NextFunction, Request, Response } from 'express';
 import { base64MimeType, getDUrl, isBase64, isDataURL } from '../utils/tools';
 import { Call } from './model/call';
+import { Button, Section } from './model/button';
 
 /** @ignore */
 const pkg = readJsonSync(path.join(__dirname,'../../package.json')),
@@ -147,6 +148,9 @@ declare module WAPI {
   const isChatMuted: (chatId: string) => Promise<boolean>;
   const clearChat: (chatId: string) => Promise<any>;
   const inviteInfo: (link: string) => Promise<any>;
+  const sendButtons: (to: string, body: any, buttons: string, title: string, footer: string) => Promise<any>;
+  const sendBanner: (to: string, base64: string) => Promise<any>;
+  const sendListMessage: (to: ChatId, sections : any, title : string, description : string, actionText : string) => Promise<any>;
   const ghostForward: (chatId: string, messageId: string) => Promise<boolean>;
   const revokeGroupInviteLink: (chatId: string) => Promise<string> | Promise<boolean>;
   const getGroupInviteLink: (chatId: string) => Promise<string>;
@@ -1146,6 +1150,64 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
       { to, amount, currency, message }
     ) as Promise<boolean | MessageId>;
   }
+
+  
+  /**
+   * Send generic quick reply buttons
+   * 
+   * @param  {ChatId} to chat id
+   * @param  {string} body The body of the buttons message
+   * @param  {Button[]} buttons Array of buttons - limit is 3!
+   * @param  {string} title The title/header of the buttons message
+   * @param  {string} footer The footer of the buttons message
+   */
+  public async sendButtons(to: ChatId, body : string, buttons : Button[], title ?: string, footer ?: string) : Promise<boolean | MessageId> {
+    return await this.pup(
+      ({ to,  body, buttons, title, footer }) => {
+        return WAPI.sendButtons(to, body, buttons, title, footer);
+      },
+      { to, body, buttons, title, footer }
+    ) as Promise<boolean | MessageId>;
+  }
+
+  /**
+   * Send a banner image
+   * 
+   * Note this is a bit of hack on top of a location message. During testing it is shown to not work on iPhones.
+   * 
+   * @param  {ChatId} to 
+   * @param  {Base64} base64 base64 encoded jpeg
+   */
+   public async sendBanner(to: ChatId, base64 : Base64) : Promise<boolean | MessageId> {
+    return await this.pup(
+      ({ to, base64 }) => {
+        return WAPI.sendBanner(to, base64);
+      },
+      { to, base64 }
+    ) as Promise<boolean | MessageId>;
+  }
+
+
+   /**
+    * [REQUIRES AN INSIDERS LICENSE-KEY](https://gum.co/open-wa?tier=Insiders%20Program)
+    * 
+    * Send a list message. This will not work when being sent from business accounts!
+    * 
+    * @param  {ChatId} to
+    * @param  {Section[]} sections The Sections of rows for the list message
+    * @param  {string} title The title of the list message
+    * @param  {string} description The description of the list message
+    * @param  {string} actionText The action text of the list message
+    */
+   public async sendListMessage(to: ChatId, sections : Section[], title : string, description : string, actionText : string) : Promise<boolean | MessageId> {
+    return await this.pup(
+      ({ to, sections, title, description, actionText }) => {
+        return WAPI.sendListMessage(to, sections, title, description, actionText);
+      },
+      { to, sections, title, description, actionText }
+    ) as Promise<boolean | MessageId>;
+  }
+
 
   /**
    * [REQUIRES AN INSIDERS LICENSE-KEY](https://gum.co/open-wa?tier=Insiders%20Program)

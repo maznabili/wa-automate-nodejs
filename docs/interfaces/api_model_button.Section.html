@@ -3,7 +3,7 @@
 <head>
 	<meta charset="utf-8">
 	<meta http-equiv="X-UA-Compatible" content="IE=edge">
-	<title>Label | @open-wa/wa-automate - v4.11.1</title>
+	<title>Section | @open-wa/wa-automate - v4.11.1</title>
 	<meta name="description" content="Documentation for @open-wa/wa-automate - v4.11.1">
 	<meta name="viewport" content="width=device-width, initial-scale=1">
 	<link rel="stylesheet" href="../assets/css/main.css">
@@ -65,13 +65,13 @@
 					<a href="../modules.html">Globals</a>
 				</li>
 				<li>
-					<a href="../modules/api_model_product.html">api/model/product</a>
+					<a href="../modules/api_model_button.html">api/model/button</a>
 				</li>
 				<li>
-					<a href="api_model_product.Label.html">Label</a>
+					<a href="api_model_button.Section.html">Section</a>
 				</li>
 			</ul>
-			<h1>Interface Label</h1>
+			<h1>Interface Section</h1>
 		</div>
 	</div>
 </header>
@@ -82,7 +82,7 @@
 				<h3>Hierarchy</h3>
 				<ul class="tsd-hierarchy">
 					<li>
-						<span class="target">Label</span>
+						<span class="target">Section</span>
 					</li>
 				</ul>
 			</section>
@@ -93,9 +93,8 @@
 						<section class="tsd-index-section ">
 							<h3>Properties</h3>
 							<ul class="tsd-index-list">
-								<li class="tsd-kind-property tsd-parent-kind-interface"><a href="api_model_product.Label.html#id" class="tsd-kind-icon">id</a></li>
-								<li class="tsd-kind-property tsd-parent-kind-interface"><a href="api_model_product.Label.html#items" class="tsd-kind-icon">items</a></li>
-								<li class="tsd-kind-property tsd-parent-kind-interface"><a href="api_model_product.Label.html#name" class="tsd-kind-icon">name</a></li>
+								<li class="tsd-kind-property tsd-parent-kind-interface"><a href="api_model_button.Section.html#rows" class="tsd-kind-icon">rows</a></li>
+								<li class="tsd-kind-property tsd-parent-kind-interface"><a href="api_model_button.Section.html#title" class="tsd-kind-icon">title</a></li>
 							</ul>
 						</section>
 					</div>
@@ -104,40 +103,18 @@
 			<section class="tsd-panel-group tsd-member-group ">
 				<h2>Properties</h2>
 				<section class="tsd-panel tsd-member tsd-kind-property tsd-parent-kind-interface">
-					<a name="id" class="tsd-anchor"></a>
-					<h3>id</h3>
-					<div class="tsd-signature tsd-kind-icon">id<span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span></div>
+					<a name="rows" class="tsd-anchor"></a>
+					<h3>rows</h3>
+					<div class="tsd-signature tsd-kind-icon">rows<span class="tsd-signature-symbol">:</span> <a href="api_model_button.Row.html" class="tsd-signature-type" data-tsd-kind="Interface">Row</a><span class="tsd-signature-symbol">[]</span></div>
 					<aside class="tsd-sources">
 					</aside>
-					<div class="tsd-comment tsd-typography">
-						<div class="lead">
-							<p>The internal ID of the label. Usually a number represented as a string e.g &quot;1&quot;</p>
-						</div>
-					</div>
 				</section>
 				<section class="tsd-panel tsd-member tsd-kind-property tsd-parent-kind-interface">
-					<a name="items" class="tsd-anchor"></a>
-					<h3>items</h3>
-					<div class="tsd-signature tsd-kind-icon">items<span class="tsd-signature-symbol">:</span> <span class="tsd-signature-symbol">{ </span>id<span class="tsd-signature-symbol">: </span><a href="../modules/api_model_aliases.html#ChatId" class="tsd-signature-type" data-tsd-kind="Type alias">ChatId</a><span class="tsd-signature-symbol"> | </span><span class="tsd-signature-symbol">`</span><span class="tsd-signature-type">false_</span><span class="tsd-signature-symbol">${</span><span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">}</span><span class="tsd-signature-type">-</span><span class="tsd-signature-symbol">${</span><span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">}</span><span class="tsd-signature-type">@g.us_</span><span class="tsd-signature-symbol">${</span><span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">}</span><span class="tsd-signature-symbol">`</span><span class="tsd-signature-symbol"> | </span><span class="tsd-signature-symbol">`</span><span class="tsd-signature-type">false_</span><span class="tsd-signature-symbol">${</span><span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">}</span><span class="tsd-signature-type">@c.us_</span><span class="tsd-signature-symbol">${</span><span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">}</span><span class="tsd-signature-symbol">`</span><span class="tsd-signature-symbol"> | </span><span class="tsd-signature-symbol">`</span><span class="tsd-signature-type">true_</span><span class="tsd-signature-symbol">${</span><span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">}</span><span class="tsd-signature-type">-</span><span class="tsd-signature-symbol">${</span><span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">}</span><span class="tsd-signature-type">@g.us_</span><span class="tsd-signature-symbol">${</span><span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">}</span><span class="tsd-signature-symbol">`</span><span class="tsd-signature-symbol"> | </span><span class="tsd-signature-symbol">`</span><span class="tsd-signature-type">true_</span><span class="tsd-signature-symbol">${</span><span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">}</span><span class="tsd-signature-type">@c.us_</span><span class="tsd-signature-symbol">${</span><span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">}</span><span class="tsd-signature-symbol">`</span><span class="tsd-signature-symbol">; </span>type<span class="tsd-signature-symbol">: </span><span class="tsd-signature-type">&quot;Chat&quot;</span><span class="tsd-signature-symbol"> | </span><span class="tsd-signature-type">&quot;Contact&quot;</span><span class="tsd-signature-symbol"> | </span><span class="tsd-signature-type">&quot;Message&quot;</span><span class="tsd-signature-symbol"> }</span><span class="tsd-signature-symbol">[]</span></div>
+					<a name="title" class="tsd-anchor"></a>
+					<h3>title</h3>
+					<div class="tsd-signature tsd-kind-icon">title<span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span></div>
 					<aside class="tsd-sources">
 					</aside>
-					<div class="tsd-comment tsd-typography">
-						<div class="lead">
-							<p>The items that are tagged with this label</p>
-						</div>
-					</div>
-				</section>
-				<section class="tsd-panel tsd-member tsd-kind-property tsd-parent-kind-interface">
-					<a name="name" class="tsd-anchor"></a>
-					<h3>name</h3>
-					<div class="tsd-signature tsd-kind-icon">name<span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span></div>
-					<aside class="tsd-sources">
-					</aside>
-					<div class="tsd-comment tsd-typography">
-						<div class="lead">
-							<p>The text contents of the label</p>
-						</div>
-					</div>
 				</section>
 			</section>
 		</div>
@@ -220,7 +197,7 @@
 						<a href="../modules.html">Modules</a>
 					</li>
 					<li class="current tsd-kind-module">
-						<a href="../modules/api_model_product.html">api/model/product</a>
+						<a href="../modules/api_model_button.html">api/model/button</a>
 					</li>
 				</ul>
 			</nav>

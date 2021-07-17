@@ -3,7 +3,7 @@
 <head>
 	<meta charset="utf-8">
 	<meta http-equiv="X-UA-Compatible" content="IE=edge">
-	<title>Call | @open-wa/wa-automate - v4.11.1</title>
+	<title>Row | @open-wa/wa-automate - v4.11.1</title>
 	<meta name="description" content="Documentation for @open-wa/wa-automate - v4.11.1">
 	<meta name="viewport" content="width=device-width, initial-scale=1">
 	<link rel="stylesheet" href="../assets/css/main.css">
@@ -65,13 +65,13 @@
 					<a href="../modules.html">Globals</a>
 				</li>
 				<li>
-					<a href="../modules/api_model_call.html">api/model/call</a>
+					<a href="../modules/api_model_button.html">api/model/button</a>
 				</li>
 				<li>
-					<a href="api_model_call.Call.html">Call</a>
+					<a href="api_model_button.Row.html">Row</a>
 				</li>
 			</ul>
-			<h1>Interface Call</h1>
+			<h1>Interface Row</h1>
 		</div>
 	</div>
 </header>
@@ -82,7 +82,7 @@
 				<h3>Hierarchy</h3>
 				<ul class="tsd-hierarchy">
 					<li>
-						<span class="target">Call</span>
+						<span class="target">Row</span>
 					</li>
 				</ul>
 			</section>
@@ -93,15 +93,9 @@
 						<section class="tsd-index-section ">
 							<h3>Properties</h3>
 							<ul class="tsd-index-list">
-								<li class="tsd-kind-property tsd-parent-kind-interface"><a href="api_model_call.Call.html#canHandleLocally" class="tsd-kind-icon">can<wbr>Handle<wbr>Locally</a></li>
-								<li class="tsd-kind-property tsd-parent-kind-interface"><a href="api_model_call.Call.html#id" class="tsd-kind-icon">id</a></li>
-								<li class="tsd-kind-property tsd-parent-kind-interface"><a href="api_model_call.Call.html#isGroup" class="tsd-kind-icon">is<wbr>Group</a></li>
-								<li class="tsd-kind-property tsd-parent-kind-interface"><a href="api_model_call.Call.html#isVideo" class="tsd-kind-icon">is<wbr>Video</a></li>
-								<li class="tsd-kind-property tsd-parent-kind-interface"><a href="api_model_call.Call.html#offerTime" class="tsd-kind-icon">offer<wbr>Time</a></li>
-								<li class="tsd-kind-property tsd-parent-kind-interface"><a href="api_model_call.Call.html#outgoing" class="tsd-kind-icon">outgoing</a></li>
-								<li class="tsd-kind-property tsd-parent-kind-interface"><a href="api_model_call.Call.html#participants" class="tsd-kind-icon">participants</a></li>
-								<li class="tsd-kind-property tsd-parent-kind-interface"><a href="api_model_call.Call.html#peerJid" class="tsd-kind-icon">peer<wbr>Jid</a></li>
-								<li class="tsd-kind-property tsd-parent-kind-interface"><a href="api_model_call.Call.html#webClientShouldHandle" class="tsd-kind-icon">web<wbr>Client<wbr>Should<wbr>Handle</a></li>
+								<li class="tsd-kind-property tsd-parent-kind-interface"><a href="api_model_button.Row.html#description" class="tsd-kind-icon">description</a></li>
+								<li class="tsd-kind-property tsd-parent-kind-interface"><a href="api_model_button.Row.html#rowId" class="tsd-kind-icon">row<wbr>Id</a></li>
+								<li class="tsd-kind-property tsd-parent-kind-interface"><a href="api_model_button.Row.html#title" class="tsd-kind-icon">title</a></li>
 							</ul>
 						</section>
 					</div>
@@ -110,100 +104,23 @@
 			<section class="tsd-panel-group tsd-member-group ">
 				<h2>Properties</h2>
 				<section class="tsd-panel tsd-member tsd-kind-property tsd-parent-kind-interface">
-					<a name="canHandleLocally" class="tsd-anchor"></a>
-					<h3>can<wbr>Handle<wbr>Locally</h3>
-					<div class="tsd-signature tsd-kind-icon">can<wbr>Handle<wbr>Locally<span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span></div>
+					<a name="description" class="tsd-anchor"></a>
+					<h3>description</h3>
+					<div class="tsd-signature tsd-kind-icon">description<span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span></div>
 					<aside class="tsd-sources">
 					</aside>
 				</section>
 				<section class="tsd-panel tsd-member tsd-kind-property tsd-parent-kind-interface">
-					<a name="id" class="tsd-anchor"></a>
-					<h3>id</h3>
-					<div class="tsd-signature tsd-kind-icon">id<span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span></div>
+					<a name="rowId" class="tsd-anchor"></a>
+					<h3>row<wbr>Id</h3>
+					<div class="tsd-signature tsd-kind-icon">row<wbr>Id<span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span></div>
 					<aside class="tsd-sources">
 					</aside>
-					<div class="tsd-comment tsd-typography">
-						<div class="lead">
-							<p>The id of the call</p>
-						</div>
-					</div>
 				</section>
 				<section class="tsd-panel tsd-member tsd-kind-property tsd-parent-kind-interface">
-					<a name="isGroup" class="tsd-anchor"></a>
-					<h3>is<wbr>Group</h3>
-					<div class="tsd-signature tsd-kind-icon">is<wbr>Group<span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span></div>
-					<aside class="tsd-sources">
-					</aside>
-					<div class="tsd-comment tsd-typography">
-						<div class="lead">
-							<p>Whether or not the call is a group call</p>
-						</div>
-					</div>
-				</section>
-				<section class="tsd-panel tsd-member tsd-kind-property tsd-parent-kind-interface">
-					<a name="isVideo" class="tsd-anchor"></a>
-					<h3>is<wbr>Video</h3>
-					<div class="tsd-signature tsd-kind-icon">is<wbr>Video<span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span></div>
-					<aside class="tsd-sources">
-					</aside>
-					<div class="tsd-comment tsd-typography">
-						<div class="lead">
-							<p>Whether or not the call is a video call</p>
-						</div>
-					</div>
-				</section>
-				<section class="tsd-panel tsd-member tsd-kind-property tsd-parent-kind-interface">
-					<a name="offerTime" class="tsd-anchor"></a>
-					<h3>offer<wbr>Time</h3>
-					<div class="tsd-signature tsd-kind-icon">offer<wbr>Time<span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span></div>
-					<aside class="tsd-sources">
-					</aside>
-					<div class="tsd-comment tsd-typography">
-						<div class="lead">
-							<p>The epoch timestamp of the call. You will have to multiply this by 1000 to get the actual epoch timestamp</p>
-						</div>
-					</div>
-				</section>
-				<section class="tsd-panel tsd-member tsd-kind-property tsd-parent-kind-interface">
-					<a name="outgoing" class="tsd-anchor"></a>
-					<h3>outgoing</h3>
-					<div class="tsd-signature tsd-kind-icon">outgoing<span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span></div>
-					<aside class="tsd-sources">
-					</aside>
-					<div class="tsd-comment tsd-typography">
-						<div class="lead">
-							<p>The direction of the call.</p>
-						</div>
-					</div>
-				</section>
-				<section class="tsd-panel tsd-member tsd-kind-property tsd-parent-kind-interface">
-					<a name="participants" class="tsd-anchor"></a>
-					<h3>participants</h3>
-					<div class="tsd-signature tsd-kind-icon">participants<span class="tsd-signature-symbol">:</span> <span class="tsd-signature-symbol">`</span><span class="tsd-signature-symbol">${</span><span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">}</span><span class="tsd-signature-type">@c.us</span><span class="tsd-signature-symbol">`</span><span class="tsd-signature-symbol">[]</span></div>
-					<aside class="tsd-sources">
-					</aside>
-					<div class="tsd-comment tsd-typography">
-						<div class="lead">
-							<p>The other participants on a group call</p>
-						</div>
-					</div>
-				</section>
-				<section class="tsd-panel tsd-member tsd-kind-property tsd-parent-kind-interface">
-					<a name="peerJid" class="tsd-anchor"></a>
-					<h3>peer<wbr>Jid</h3>
-					<div class="tsd-signature tsd-kind-icon">peer<wbr>Jid<span class="tsd-signature-symbol">:</span> <span class="tsd-signature-symbol">`</span><span class="tsd-signature-symbol">${</span><span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">}</span><span class="tsd-signature-type">@c.us</span><span class="tsd-signature-symbol">`</span></div>
-					<aside class="tsd-sources">
-					</aside>
-					<div class="tsd-comment tsd-typography">
-						<div class="lead">
-							<p>The id of the account calling</p>
-						</div>
-					</div>
-				</section>
-				<section class="tsd-panel tsd-member tsd-kind-property tsd-parent-kind-interface">
-					<a name="webClientShouldHandle" class="tsd-anchor"></a>
-					<h3>web<wbr>Client<wbr>Should<wbr>Handle</h3>
-					<div class="tsd-signature tsd-kind-icon">web<wbr>Client<wbr>Should<wbr>Handle<span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span></div>
+					<a name="title" class="tsd-anchor"></a>
+					<h3>title</h3>
+					<div class="tsd-signature tsd-kind-icon">title<span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span></div>
 					<aside class="tsd-sources">
 					</aside>
 				</section>
@@ -288,48 +205,12 @@
 						<a href="../modules.html">Modules</a>
 					</li>
 					<li class="current tsd-kind-module">
-						<a href="../modules/api_model_call.html">api/model/call</a>
+						<a href="../modules/api_model_button.html">api/model/button</a>
 					</li>
 				</ul>
 			</nav>
 			<nav class="tsd-navigation secondary menu-sticky">
 				<ul class="before-current">
-				</ul>
-				<ul class="current">
-					<li class="current tsd-kind-interface tsd-parent-kind-module">
-						<a href="api_model_call.Call.html" class="tsd-kind-icon">Call</a>
-						<ul>
-							<li class=" tsd-kind-property tsd-parent-kind-interface">
-								<a href="api_model_call.Call.html#canHandleLocally" class="tsd-kind-icon">can<wbr>Handle<wbr>Locally</a>
-							</li>
-							<li class=" tsd-kind-property tsd-parent-kind-interface">
-								<a href="api_model_call.Call.html#id" class="tsd-kind-icon">id</a>
-							</li>
-							<li class=" tsd-kind-property tsd-parent-kind-interface">
-								<a href="api_model_call.Call.html#isGroup" class="tsd-kind-icon">is<wbr>Group</a>
-							</li>
-							<li class=" tsd-kind-property tsd-parent-kind-interface">
-								<a href="api_model_call.Call.html#isVideo" class="tsd-kind-icon">is<wbr>Video</a>
-							</li>
-							<li class=" tsd-kind-property tsd-parent-kind-interface">
-								<a href="api_model_call.Call.html#offerTime" class="tsd-kind-icon">offer<wbr>Time</a>
-							</li>
-							<li class=" tsd-kind-property tsd-parent-kind-interface">
-								<a href="api_model_call.Call.html#outgoing" class="tsd-kind-icon">outgoing</a>
-							</li>
-							<li class=" tsd-kind-property tsd-parent-kind-interface">
-								<a href="api_model_call.Call.html#participants" class="tsd-kind-icon">participants</a>
-							</li>
-							<li class=" tsd-kind-property tsd-parent-kind-interface">
-								<a href="api_model_call.Call.html#peerJid" class="tsd-kind-icon">peer<wbr>Jid</a>
-							</li>
-							<li class=" tsd-kind-property tsd-parent-kind-interface">
-								<a href="api_model_call.Call.html#webClientShouldHandle" class="tsd-kind-icon">web<wbr>Client<wbr>Should<wbr>Handle</a>
-							</li>
-						</ul>
-					</li>
-				</ul>
-				<ul class="after-current">
 				</ul>
 			</nav>
 		</div>
