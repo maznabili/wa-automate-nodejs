@@ -12,6 +12,32 @@ export enum QRFormat{
     WEBM = 'webm'
   }
 
+
+export enum CLOUD_PROVIDERS {
+    GCP = "GCP",
+    WASABI = "WASABI",
+    AWS = "AWS"
+}
+
+export enum DIRECTORY_STRATEGY {
+    /**
+     * E.g `/2021-08-16/`
+     */
+    DATE = "DATE",
+    /**
+     * E.g `/447123456789/`
+     */
+    CHAT = "CHAT",
+    /**
+     * E.g `/447123456789/2021-08-16/`
+     */
+    CHAT_DATE = "CHAT_DATE",
+    /**
+     * E.g `/2021-08-16/447123456789/`
+     */
+    DATE_CHAT = "DATE_CHAT"
+}
+
   /**
    * The available languages for the host security notification
    */
@@ -21,6 +47,7 @@ export enum QRFormat{
       DEDE = 'de-de',
       IDID = 'id-id',
       ITIT = 'it-it',
+      NLNL = 'nl-nl',
       ES = 'es',
   }
 
@@ -99,6 +126,21 @@ export interface DevTools {
      */
     pass : string
 }
+
+export interface EventPayload {
+    //epoch timestamp
+    ts : number;
+    //session id
+    sessionId: string;
+    //id of the webhook event. Useful for idempotency
+    id: string;
+    //the event type
+    event: SimpleListener;
+    //the actual data emitted from the original event
+    data: any;
+    //The event payload can have other undocumented properties
+    [k : string]: any;
+  }
 
 export interface Webhook {
     /**
@@ -443,7 +485,7 @@ export interface ConfigObject {
     keepUpdated ?: boolean;
     /**
      * Syncs the viewport size with the window size which is how normal browsers act. Only relevant when `headless: false` and this overrides `viewport` config.
-     * @default `false`
+     * @default `true`
      */
     resizable ?: boolean;
     /**
@@ -596,16 +638,112 @@ export interface ConfigObject {
      /**
       * Set a preprocessor for messages. See [[PREPROCESSORS]] for more info.
       * 
-      * options: `SCRUB`, `BODY_ONLY`, `AUTO_DECRYPT`, `AUTO_DECRYPT_SAVE`.
+      * options: `SCRUB`, `BODY_ONLY`, `AUTO_DECRYPT`, `AUTO_DECRYPT_SAVE`, `UPLOAD_CLOUD`.
       * @default `undefined`
       */
-     messagePreprocessor ?: PREPROCESSORS
+     messagePreprocessor ?: PREPROCESSORS,
+     /**
+      * REQUIRED IF `messagePreprocessor` IS SET TO `UPLOAD_CLOUD`.
+      * 
+      * This can be set via the config or the corresponding environment variables.
+      */
+     cloudUploadOptions ?: {
+         /**
+          * `AWS`, `GCP` or `WASABI`
+          * 
+          * env: `OW_CLOUD_ACCESS_KEY_ID`
+          */
+         provider: CLOUD_PROVIDERS,
+         /**
+          * S3 compatible access key ID. 
+          * 
+          * e.g: `AKIAIOSFODNN7EXAMPLE` or `GOOGTS7C7FUP3AIRVJTE2BCD`
+          * 
+          * env: `OW_CLOUD_ACCESS_KEY_ID`
+          */
+         accessKeyId : string,
+         /**
+          * S3 compatible secret access key.
+          * 
+          * e.g `wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY`
+          * 
+          * env: `OW_CLOUD_SECRET_ACCESS_KEY`
+          */
+         secretAccessKey : string,
+         /**
+          * Bucket name
+          * 
+          * env: `OW_CLOUD_BUCKET`
+          */
+         bucket: string,
+         /**
+          * Bucket region.
+          * 
+          * Not required for `GCP` provider
+          * 
+          * env: `OW_CLOUD_REGION`
+          * 
+          */ 
+         region ?: string
+         /**
+          * Ignore processing of messages that are sent by the host account itself
+          * 
+          * env: `OW_CLOUD_IGNORE_HOST`
+          */
+         ignoreHostAccount ?: boolean
+         /**
+          * The directory strategy to use when uploading files. Or just set it to a custom directory string.
+          * 
+          * env: `OW_DIRECTORY`
+          */
+         directory ?: DIRECTORY_STRATEGY | string
+     },
      /**
       * What to do when an error is detected on a client method.
       * 
       * @default `NOTHING`
       */
-      onError ?: OnError
+    onError ?: OnError
+    /**
+     * 
+     * Please note that multi-device is still in beta so a lot of things may not work. It is HIGHLY suggested to NOT use this in production!!!!
+     * 
+     * Set this to true if you're using the multidevice beta.
+     * 
+     * @default `false`
+     */
+    multiDevice ?: boolean
+    /**
+     * Base64 encoded S3 Bucket & Authentication object for session data files. The object should be in the same format as cloudUploadOptions.
+     */
+    sessionDataBucketAuth ?: string
+    /**
+     * Set the automatic emoji detection character. Set this to false to disable auto emoji. Default is `:`.
+     * 
+     * @default `:`
+     */
+    autoEmoji ?: string;
+    /**
+     * Set the maximum amount of chats to be present in a session.
+     */
+    maxChats ?: number;
+    /**
+     * Set the maximum amount of messages to be present in a session. 
+     */
+     maxMessages ?: number;
+     /**
+      * Your Discord ID to get onto the sticker leaderboard!
+      */
+     discord ?: string
+     /**
+      * Don't implicitly determine if the host logged out.
+      */
+     ignoreNuke ?: boolean
+     /**
+      * Makes sure the headless session is usable even on first login.
+      * Headful sessions are ususally only usable on reauthentication.
+      */
+     ensureHeadfulIntegrity ?: boolean
     /**@internal */
     [x: string]: any 
 }

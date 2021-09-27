@@ -1,5 +1,4 @@
-import { Id } from './id';
-import { GroupChatId, NonSerializedId, WaServers } from './aliases';
+import { ChatId, ContactId, GroupChatId, NonSerializedId } from './aliases';
 
 export interface Participant {
   id: NonSerializedId,
@@ -36,10 +35,10 @@ export enum groupChangeEvent {
 }
 
 export interface ParticipantChangedEventModel {
-  by: Id,
+  by: ContactId,
   action: groupChangeEvent,
-  who: [Id]
-  chat: Id
+  who: ContactId[]
+  chat: ChatId
 }
 
 /**

@@ -9,8 +9,10 @@ import { tryOpenFileAsObject } from './file-utils';
 import { ConfigObject } from '../api/model/config';
 import uuidAPIKey from 'uuid-apikey';
 import { ev, Spin } from '../controllers/events';
-import isUrl from 'is-url';
+import isUrl from 'is-url-superb';
 import * as path from 'path';
+
+let checkUrl = url => typeof url === 'string' ? isUrl(url) : false;
 
 const configWithCases = readJsonSync(path.join(__dirname,'../../bin/config-schema.json'));
 
@@ -27,6 +29,18 @@ const optionList:
         alias: 'n',
         type: Boolean,
         description: "Don't expose the api. This may be useful if you just want to set the webhooks."
+    },{
+        name: 'bot-press-url',
+        alias: 'b',
+        type: String,
+        typeLabel: '{blue {underline http://localhost:3000/api/v1/bots/cool-bot}}',
+        description: "The Botpress URL that ends with your bot id."
+    },{
+        name: 'twilio-webhook',
+        alias: 't',
+        type: String,
+        typeLabel: '{blue {underline http://localhost:5555/incoming}}',
+        description: "Send twillio payloads to this URL. EASY API will also parse and processes twillio response message payloads."
     },
     {
         name: 'port',
@@ -169,6 +183,12 @@ const optionList:
         default: false
     },
     {
+        name: 'cors',
+        type: Boolean,
+        description: "Enable all cors requests",
+        default: false
+    },
+    {
         name: 'socket',
         type: Boolean,
         description: "Expose a socket.io middleware on the server.",
@@ -197,6 +217,11 @@ const optionList:
         name: 'auto-reject',
         type: Boolean,
         description: "Automatically reject incoming phone and video calls to the host account."
+    },
+    {
+        name: 'skip-url-check',
+        type: Boolean,
+        description: "Don't validate webhook URLs. Enables use of non-FQDNs."
     },
     {
         name: 'help',
@@ -258,7 +283,7 @@ export const helptext = commandLineUsage([{
             let type;
             if (c.type === 'boolean') type = Boolean;
             if (c.type === 'string') type = String;
-            if (c.type === '"number"') type = Number;
+            if (c.type === '"number"' || c.type === 'number') type = Number;
             return {
                 name: c.p,
                 type,
@@ -277,7 +302,7 @@ export const helptext = commandLineUsage([{
 
 export const envArgs: () => JsonObject = () => {
     const env = {};
-    Object.keys(process.env).filter(k => k.includes('WA')).map(([k, v]) => env[changeCase.camelCase(k.replace('WA_', ''))] = (v == 'false' || v == 'FALSE') ? false : (v == 'true' || v == 'TRUE') ? true : Number(v) || v);
+    Object.entries(process.env).filter(([k, ]) => k.includes('WA')).map(([k, v]) => env[changeCase.camelCase(k.replace('WA_', ''))] = (v == 'false' || v == 'FALSE') ? false : (v == 'true' || v == 'TRUE') ? true : Number(v) || v);
     return env
 }
 
@@ -335,7 +360,7 @@ export const cli: () => {
         ...envArgs()
     };
 
-    const PORT = cliConfig.port || 8080;
+    const PORT = cliConfig.port || process.env.PORT || 8080;
     const spinner = new Spin(cliConfig.sessionId, 'STARTUP', cliConfig?.disableSpins);
 
     const createConfig: ConfigObject = {
@@ -387,15 +412,28 @@ export const cli: () => {
         })
     }
 
+    if(cliConfig.skipUrlCheck) checkUrl = () => true;
+
     if (cliConfig.webhook || cliConfig.webhook == '') {
-        if (isUrl(cliConfig.webhook) || Array.isArray(cliConfig.webhook)) {
+        if (checkUrl(cliConfig.webhook) || Array.isArray(cliConfig.webhook)) {
             spinner.succeed('webhooks set already')
         } else {
             if (cliConfig.webhook == '') cliConfig.webhook = 'webhooks.json';
             cliConfig.webhook = tryOpenFileAsObject(cliConfig.webhook, true);
-            if (!isUrl(cliConfig.webhook)) {
+            if (!checkUrl(cliConfig.webhook)) {
                 cliConfig.webhook = undefined
             }
+        }
+    }
+
+
+    if (cliConfig.twilioWebhook || cliConfig.twilioWebhook == '') {
+            if (cliConfig.twilioWebhook == '' && cliConfig.webhook) cliConfig.twilioWebhook = cliConfig.webhook;
+            if (!checkUrl(cliConfig.twilioWebhook)) {
+                cliConfig.twilioWebhook = undefined
+        }
+        if(cliConfig.twilioWebhook && (!createConfig.cloudUploadOptions || createConfig.messagePreprocessor!=='UPLOAD_CLOUD')) {
+            spinner.info('twilioWebhook set but messagePreprocessor not set to UPLOAD_CLOUD or cloudUploadOptions is missing')
         }
     }
 

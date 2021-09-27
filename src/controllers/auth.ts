@@ -42,6 +42,15 @@ export const isInsideChat = (waPage: Page) : Observable<boolean> => {
   );
 };
 
+export const waitForRipeSession = async (waPage: Page) : Promise<boolean> => {
+  try {
+    await waPage.waitForFunction(`!![...document.getElementsByTagName('div')].map(div=>Object.keys(div).filter(k=>k.includes('__reactFiber'))[0] ? div[Object.keys(div).filter(k=>k.includes('__reactFiber'))[0]].return.type : false).filter(x=>x && x['displayName']==='IntroPanel')[0]`);
+    return true;
+  } catch (error) {
+    return false;
+  }
+}
+
 export const sessionDataInvalid = async (waPage: Page) : Promise<string> => {
   await waPage
     .waitForFunction(
@@ -97,12 +106,14 @@ export async function smartQr(waPage: Page, config?: ConfigObject, spinner ?: Sp
 
   return new Promise(async resolve => {
     const funcName = '_smartQr';
+    let gotResult = false;
     const fn = async (qrData) => {
-      if(qrData==='QR_CODE_SUCCESS') {
-        spinner?.succeed("QR code scanned. Loading session...")
+      if(!gotResult && (qrData==='QR_CODE_SUCCESS' || qrData==='MULTI_DEVICE_DETECTED')) {
+        gotResult = true;
+        spinner?.succeed(qrData==='MULTI_DEVICE_DETECTED' ? "Multi device support for this project is EXPERIMENTAL. Some things may not work...." : "QR code scanned. Loading session...")
         return resolve(await isInsideChat(waPage).toPromise())
       }
-      grabAndEmit(qrData)
+      if(!gotResult) grabAndEmit(qrData)
     }
     const set = () => waPage.evaluate(({funcName}) => {
       //@ts-ignore

@@ -1,11 +1,13 @@
 import { create, ev } from '../index'
 import terminalLink from 'terminal-link';
-import isUrl from 'is-url';
+import isUrl from 'is-url-superb';
 import tcpPortUsed from 'tcp-port-used';
 import { default as axios } from 'axios'
 import { cli } from './setup';
 import { collections, generateCollections } from './collections';
-import { setUpExpressApp, setupAuthenticationLayer, setupRefocusDisengageMiddleware, setupApiDocs, setupSwaggerStatsMiddleware, setupMediaMiddleware, app, setupSocketServer, server } from './server';
+import { setUpExpressApp, setupAuthenticationLayer, setupRefocusDisengageMiddleware, setupApiDocs, setupSwaggerStatsMiddleware, setupMediaMiddleware, app, setupSocketServer, server, setupBotPressHandler, setupTwilioCompatibleWebhook, enableCORSRequests } from './server';
+
+let checkUrl = isUrl;
 
 const ready: (config : any) => Promise<void> = async (config : any) => {
     if (process.send) {
@@ -34,6 +36,7 @@ async function start() {
 
     spinner.start("Launching EASY API")
     setUpExpressApp();
+    if(cliConfig.cors) await enableCORSRequests();
     try {
         const { status, data } = await axios.post(`http://localhost:${PORT}/getConnectionState`);
         if (status === 200 && data.response === "CONNECTED") {
@@ -55,7 +58,8 @@ async function start() {
             if (!Array.isArray(cliConfig.ef)) cliConfig.ef = [cliConfig.ef]
             cliConfig.ef = cliConfig.ef.flatMap(s => s.split(','))
         }
-        if (!isUrl(cliConfig.ev)) spinner.fail("--ev/-e expecting URL - invalid URL.")
+        if(cliConfig.skipUrlCheck) checkUrl = () => true
+        if (!checkUrl(cliConfig.ev)) spinner.fail("--ev/-e expecting URL - invalid URL.")
         else ev.on('**', async (data, sessionId, namespace) => {
             if (cliConfig?.ef) {
                 if (!cliConfig.ef.includes(namespace)) return;
@@ -91,12 +95,25 @@ async function start() {
             })
         }
         client.onLogout(async () => {
-            console.error('!!!! CLIENT LOGGED OUT. Process closing !!!!')
+            console.error('!!!! CLIENT LOGGED OUT !!!!')
             if (cliConfig && !cliConfig.noKillOnLogout) {
                 console.error("Shutting down.")
                 process.exit();
             }
         })
+        if(cliConfig?.botPressUrl){
+            spinner.info('Setting Up Botpress handler');
+            setupBotPressHandler(cliConfig, client)
+            spinner.succeed('Botpress handler set up successfully');
+        }
+
+        if(cliConfig?.twilioWebhook){
+            spinner.info('Setting Up Twilio Compaitible Webhook');
+            setupTwilioCompatibleWebhook(cliConfig, client)
+            spinner.succeed('Twilio Compaitible Webhook set up successfully');
+        }
+
+        
         if (cliConfig?.webhook) {
             if (Array.isArray(cliConfig.webhook)) {
                 await Promise.all(cliConfig.webhook.map(webhook => {

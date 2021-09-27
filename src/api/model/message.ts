@@ -1,8 +1,13 @@
 import { ChatId, MessageId } from "./aliases";
+import { Button, Row, Section } from "./button";
 import { Chat } from "./chat";
 import { Contact } from "./contact";
 
 export interface Message {
+  /**
+   * The ID of the selected button
+   */ 
+  selectedButtonId: string;
   /**
    * The id of the message
    */
@@ -15,6 +20,10 @@ export interface Message {
    * The type of the message, see [[MessageTypes]]
    */
   type: MessageTypes;
+  /**
+   * Used to checking the integrity of the decrypted media.
+   */
+  filehash ?: string;
   mimetype?: string;
   /**
    * The latitude of a location message
@@ -91,6 +100,10 @@ export interface Message {
    * This is the filePath of the decrypted file.
    */
   filePath ?: string;
+  /**
+   * The given filename of the file
+   */
+  filename ?: string;
   content: string;
   isGroupMsg: boolean;
   isMMS: boolean;
@@ -119,6 +132,27 @@ export interface Message {
   mediaData: unknown;
   shareDuration: number;
   isAnimated: boolean;
+  /**
+   * The URL of the file after being uploaded to the cloud using a cloud upload message preprocessor.
+   */
+   cloudUrl?: string;
+   /**
+    * Buttons associated with the message
+    */
+   buttons ?: Button[]
+   /**
+    * List response associated with the message
+    */
+    listResponse ?: Row
+    /**
+     * The list associated with the list message
+     */
+    list ?: {
+      "sections": Section[],
+      "title": string,
+      "description": string,
+      "buttonText":  string,
+    }
 }
 
 
@@ -140,6 +174,8 @@ export enum MessageTypes {
   CONTACT_CARD_MULTI = 'multi_vcard',
   REVOKED = 'revoked',
   ORDER = 'order',
+  BUTTONS_RESPONSE = 'buttons_response',
+  LIST_RESPONSE = "list_response",
   UNKNOWN = 'unknown'
 }
 

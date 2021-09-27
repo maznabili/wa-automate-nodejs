@@ -6,6 +6,7 @@ import { puppeteerConfig, useragent, width, height} from '../config/puppeteer.co
 import { Browser, Page } from 'puppeteer';
 import { Spin, EvEmitter } from './events';
 import { ConfigObject } from '../api/model';
+import { FileNotFoundError, getTextFile } from 'pico-s3';
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const puppeteer = require('puppeteer-extra')
 
@@ -13,6 +14,7 @@ let browser;
 
 export async function initPage(sessionId?: string, config?:ConfigObject, customUserAgent?:string, spinner ?: Spin) : Promise<Page> {
   const setupPromises = [];
+  if(config?.resizable === undefined || !config?.resizable == false) config.defaultViewport= null
   if(config?.useStealth) {
     const {default : stealth} = await import('puppeteer-extra-plugin-stealth')
     puppeteer.use(stealth());
@@ -32,11 +34,10 @@ export async function initPage(sessionId?: string, config?:ConfigObject, customU
     height: config?.viewport?.height || height,
     deviceScaleFactor: 1
   }));
-  if(config?.resizable) config.defaultViewport= null
   const cacheEnabled = config?.cacheEnabled === false ? false : true;
   const blockCrashLogs = config?.blockCrashLogs === false ? false : true;
   setupPromises.push(waPage.setBypassCSP(config?.bypassCSP || false));
-  setupPromises.push(waPage.setCacheEnabled(cacheEnabled));
+  if(!config?.multiDevice) setupPromises.push(waPage.setCacheEnabled(cacheEnabled));
   const blockAssets = !config?.headless ? false : config?.blockAssets || false;
   if(blockAssets){
     const {default : block} = await import('puppeteer-extra-plugin-block-resources')
@@ -86,15 +87,42 @@ export async function initPage(sessionId?: string, config?:ConfigObject, customU
   }
 
   spinner?.info('Loading session data')
-  const sessionjson = getSessionDataFromFile(sessionId, config, spinner)
+  let sessionjson : any = getSessionDataFromFile(sessionId, config, spinner)
+  if(!sessionjson && config.sessionDataBucketAuth) {
+    try {
+      spinner?.info('Unable to find session data file locally, attempting to find session data in cloud storage..')
+      sessionjson = JSON.parse(Buffer.from(await getTextFile({
+        directory: '_sessionData',
+        ...JSON.parse(Buffer.from(config.sessionDataBucketAuth, 'base64').toString('ascii')),
+        filename: `${config.sessionId || 'session'}.data.json`
+      }), 'base64').toString('ascii'));
+      spinner?.succeed('Successfully downloaded session data file from cloud storage!')
+    } catch (error) {
+      spinner?.fail(`${error instanceof FileNotFoundError ? 'The session data file was not found in the cloud storage bucket' : 'Something went wrong while fetching session data from cloud storage bucket'}. Continuing...`)
+    }
+  }
+
   if(sessionjson) {
-  spinner?.info('Existing session data detected. Injecting...')
-    await waPage.evaluateOnNewDocument(
+  spinner?.info(config.multiDevice ?  "multi-device enabled. Session data skipped..." : 'Existing session data detected. Injecting...')
+  if(!config?.multiDevice) await waPage.evaluateOnNewDocument(
   session => {
         localStorage.clear();
         Object.keys(session).forEach(key=>localStorage.setItem(key,session[key]));
     }, sessionjson);
     spinner?.succeed('Existing session data injected')
+  } else {
+    if(config?.multiDevice) {
+      spinner?.info("No session data detected. Opting in for MD.")
+      spinner?.info("Make sure to keep the session alive for at least 5 minutes after scanning the QR code before trying to restart a session!!")
+      await waPage.evaluateOnNewDocument(
+        session => {
+              localStorage.clear();
+              Object.keys(session).forEach(key=>localStorage.setItem(key,session[key]));
+          },{
+            "md-opted-in": "true",
+            "remember-me": "true"
+          })
+    }
   }
     if(config?.proxyServerCredentials && !config?.useNativeProxy) {
       await proxy(waPage, proxyAddr);
@@ -185,6 +213,13 @@ await Promise.all(
   ].map(js=>addScript(page,js))
   );
   await addScript(page,'wapi.js')
+  await addScript(page,'wapi.js')
+  await addScript(page,'wapi.js')
+  await addScript(page,'wapi.js')
+  await addScript(page,'wapi.js')
+  await addScript(page,'wapi.js')
+  await addScript(page,'wapi.js')
+  await addScript(page,'wapi.js')
   await addScript(page,'launch.js')
   return page;
 }
@@ -225,7 +260,11 @@ async function initBrowser(sessionId?: string, config:any={}) {
   
   if(config?.proxyServerCredentials?.address && config?.useNativeProxy) puppeteerConfig.chromiumArgs.push(`--proxy-server=${config.proxyServerCredentials.address}`)
   if(config?.browserWsEndpoint) config.browserWSEndpoint = config.browserWsEndpoint;
-  const args = [...puppeteerConfig.chromiumArgs,...(config?.chromiumArgs||[])];
+  let args = [...puppeteerConfig.chromiumArgs,...(config?.chromiumArgs||[])];
+  if(config?.multiDevice) {
+    args = args.filter(x=>x!='--incognito')
+    config["userDataDir"] = `./_IGNORE_${config?.sessionId || 'session'}`
+  }
   if(config?.corsFix) args.push('--disable-web-security');
   const browser = (config?.browserWSEndpoint) ? await puppeteer.connect({...config}): await puppeteer.launch({
     headless: true,

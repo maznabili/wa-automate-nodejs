@@ -6,7 +6,7 @@ import { Message } from './model/message';
 import { default as axios, AxiosRequestConfig} from 'axios';
 import { ParticipantChangedEventModel } from './model/group-metadata';
 import { useragent, puppeteerConfig } from '../config/puppeteer.config'
-import { ConfigObject, STATE, LicenseType, Webhook, OnError } from './model';
+import { ConfigObject, STATE, LicenseType, Webhook, OnError, EventPayload } from './model';
 import { PageEvaluationTimeout, CustomError, ERROR_NAME, AddParticipantError  } from './model/errors';
 import PQueue, { DefaultAddOptions, Options } from 'p-queue';
 import { ev, Spin } from '../controllers/events';
@@ -15,18 +15,18 @@ import { default as parseFunction} from 'parse-function'
 import * as fs from 'fs'
 import datauri from 'datauri'
 import pino from 'pino'
-import isUrl from 'is-url'
+import isUrl from 'is-url-superb'
 import { readJsonSync } from 'fs-extra'
 import treekill from 'tree-kill';
 import { HealthCheck, SessionInfo } from './model/sessionInfo';
 import { deleteSessionData, injectApi } from '../controllers/browser';
-import { isAuthenticated } from '../controllers/auth';
+import { isAuthenticated, waitForRipeSession } from '../controllers/auth';
 import { ChatId, GroupChatId, Content, Base64, MessageId, ContactId, DataURL, FilePath } from './model/aliases';
 import { bleachMessage, decryptMedia } from '@open-wa/wa-decrypt';
 import * as path from 'path';
 import { CustomProduct, Label, Order, Product } from './model/product';
 import { defaultProcessOptions, Mp4StickerConversionProcessOptions, StickerMetadata } from './model/media';
-import { getAndInjectLicense, getAndInjectLivePatch, getLicense } from '../controllers/initializer';
+import { earlyInjectionCheck, getAndInjectLicense, getAndInjectLivePatch, getLicense } from '../controllers/initializer';
 import { SimpleListener } from './model/events';
 import { AwaitMessagesOptions, Collection, CollectorFilter, CollectorOptions } from '../structures/Collector';
 import { MessageCollector } from '../structures/MessageCollector';
@@ -38,6 +38,7 @@ import { NextFunction, Request, Response } from 'express';
 import { base64MimeType, getDUrl, isBase64, isDataURL } from '../utils/tools';
 import { Call } from './model/call';
 import { Button, Section } from './model/button';
+import { JsonObject } from 'type-fest';
 
 /** @ignore */
 const pkg = readJsonSync(path.join(__dirname,'../../package.json')),
@@ -105,6 +106,9 @@ declare module WAPI {
   const getGeneratedUserAgent: (userAgent?: string) => string;
   const forwardMessages: (to: string, messages: string | (string | Message)[], skipMyMessages: boolean) => any;
   const createNewProduct : (name : string, price : number, currency : string, images : DataURL[], description : string, url ?: string, internalId ?: string, isHidden ?: boolean) => Promise<any>;
+  const editProduct : (id: string, name : string, price : number, currency : string, images : DataURL[], description : string, url ?: string, internalId ?: string, isHidden ?: boolean) => Promise<any>;
+  const sendProduct : (chatId : string, productId : string) => Promise<any>;
+  const removeProduct : (productId : string) => Promise<any>;
   const sendLocation: (to: string, lat: any, lng: any, loc: string) => Promise<string>;
   const addParticipant: (groupId: string, contactId: string) => Promise<boolean | string>;
   const sendGiphyAsSticker: (chatId: string, url: string) => Promise<any>;
@@ -119,6 +123,7 @@ declare module WAPI {
   const setPresence: (available: boolean) => void;
   const getMessageReaders: (messageId: string) => Contact[];
   const getStatus: (contactId: string) => void;
+  const B: (chatId: string, payload: any) => MessageId;
   const getCommonGroups: (contactId: string) => Promise<{id:string,title:string}[]>;
   const forceUpdateLiveLocation: (chatId: string) => Promise<LiveLocationChangedEvent []> | boolean;
   const setGroupIcon: (groupId: string, imgData: string) => Promise<boolean>;
@@ -249,6 +254,7 @@ declare module WAPI {
   const loadEarlierMessages: (contactId: string) => Promise<Message []>;
   const getChatsByLabel: (label: string) => Promise<Chat[] | string>;
   const loadAllEarlierMessages: (contactId: string) => any;
+  const loadEarlierMessagesTillDate: (contactId: string, timestamp: number) => any;
   const getUnreadMessages: (
     includeMe: boolean,
     includeNotifications: boolean,
@@ -269,7 +275,9 @@ declare module WAPI {
 
 export class Client {
   private _loadedModules: any[];
-  private _registeredWebhooks: any;
+  private _registeredWebhooks: {
+    [id: string]: Webhook
+  }
   private _registeredEvListeners: any;
   private _webhookQueue: any;
   private _createConfig: ConfigObject;
@@ -323,7 +331,15 @@ export class Client {
       this.logger().child({
         PHONE_VERSION: this._sessionInfo.PHONE_VERSION
       }).info()
-
+      
+      if(this._createConfig?.autoEmoji === undefined || this._createConfig?.autoEmoji) {
+        const ident = typeof this._createConfig?.autoEmoji === "string" ? this._createConfig?.autoEmoji : ":"
+        this.onMessage(async message => {
+          if(message.body && message.body.startsWith(ident) && message.body.endsWith(ident)) {
+            return await this.sendEmoji(message.from,message.body.replace(new RegExp(ident, 'g'),""),message.id)
+          }
+        })
+      }
       if(this._createConfig?.deleteSessionDataOnLogout || this._createConfig?.killClientOnLogout) {
         this.onLogout(() => {
             if(this._createConfig?.deleteSessionDataOnLogout) deleteSessionData(this._createConfig)
@@ -349,14 +365,16 @@ export class Client {
 
   private _setOnClose() : void {
     this._page.on('close',()=>{
-      console.log("Browser page has closed. Killing client")
-      this.kill();
-      if(this._createConfig?.killProcessOnBrowserClose) process.exit();
+      if(!this._refreshing) {
+        console.log("Browser page has closed. Killing client")
+        this.kill();
+        if(this._createConfig?.killProcessOnBrowserClose) process.exit();
+      }
     })
   }
 
-  private async _reInjectWapi() : Promise<void> {
-    this._page = await injectApi(this._page)
+  private async _reInjectWapi(newTab ?: Page) : Promise<void> {
+    await injectApi(newTab || this._page)
   }
 
   private async _reRegisterListeners(){
@@ -387,39 +405,76 @@ export class Client {
    * This will attempt to re register all listeners EXCEPT onLiveLocation and onParticipantChanged
    */
    public async refresh() : Promise<boolean> {
-  this._refreshing = true;
+      this._refreshing = true;
      const spinner = new Spin(this._createConfig?.sessionId || 'session', 'REFRESH', this._createConfig?.disableSpins);
      const { me } = await this.getMe();
      /**
       * preload license
       */
      const preloadlicense = this._createConfig?.licenseKey ? await getLicense(this._createConfig, me, this._sessionInfo, spinner) : false
-     spinner.info('Refreshing page')
+     spinner.info('Refreshing session')
      const START_TIME = Date.now();
-     await this._page.goto(puppeteerConfig.WAUrl);
-     if(await isAuthenticated(this._page)) {
+     spinner.info("Opening session in new tab")
+     const newTab = await this._page.browser().newPage();  
+     await newTab.goto(puppeteerConfig.WAUrl);
+     //Two promises. One that closes the previous page, one that sets up the new page
+     const closePageOnConflict = async () => {
+      const useHere: string = await this._page.evaluate(()=>WAPI.getUseHereString());
+     spinner.info("Waiting for conflict to close stale tab...")
+     await this._page.waitForFunction(
+        `[...document.querySelectorAll("div[role=button")].find(e=>{return e.innerHTML.toLowerCase().includes("${useHere.toLowerCase()}")})`,
+        { timeout: 0, polling: 500 }
+      );
+      await this._page.goto('about:blank')
+     spinner.info("Closing stale tab")
+     await this._page.close();
+     spinner.info("Stale tab closed. Switching contexts...")
+     this._page = newTab;
+     }
+
+     const setupNewPage = async () => {
+     /**
+      * Wait for the new page to be loaded up before closing existing page
+      */
+     await earlyInjectionCheck(newTab)
+     spinner.info("Checking if fresh session is authenticated...")
+     if(await isAuthenticated(newTab)) {
+        /**
+         * Reset all listeners
+         */
+         this._registeredEvListeners = {};
+         // this._listeners = {};
+         
+      spinner.start("Waiting for ripe session...")
+      if(await waitForRipeSession(newTab)) spinner.succeed("Session ready for injection");
+      else spinner.fail("You may experience issues in headless mode. Continuing...")
+
+     spinner.info("Injected new session...")
+     await this._reInjectWapi(newTab);
        /**
-        * Reset all listeners
+        * patch
         */
-        this._registeredEvListeners = {};
-        // this._listeners = {};
-      await this._reInjectWapi();
-      /**
-       * patch
-       */
-      await getAndInjectLivePatch(this._page, spinner)
-      if (this._createConfig?.licenseKey) await getAndInjectLicense(this._page,this._createConfig,me, this._sessionInfo, spinner, preloadlicense);
-      /**
-       * init patch
-       */
-     await injectInitPatch(this._page)
+       await getAndInjectLivePatch(newTab, spinner, null, this._createConfig, this._sessionInfo)
+       if (this._createConfig?.licenseKey) await getAndInjectLicense(newTab,this._createConfig,me, this._sessionInfo, spinner, preloadlicense);
+       /**
+        * init patch
+        */
+      await injectInitPatch(newTab)
+     } else throw new Error("Session Logged Out. Cannot refresh. Please restart the process and scan the qr code.")
+    }
+     await Promise.all([
+      closePageOnConflict(),
+      setupNewPage()
+     ])
+     spinner.info("New session live. Setting up...")
+     spinner.info("Reregistering listeners")
      await this.loaded()
      if(!this._createConfig?.eventMode) await this._reRegisterListeners();
      spinner.succeed(`Session refreshed in ${(Date.now() - START_TIME)/1000}s`)
      this._refreshing = false;
      spinner.remove()
+     this._setOnClose();
      return true;
-     } else throw new Error("Session Logged Out. Cannot refresh. Please restart the process and scan the qr code.")
    }
 
   /**
@@ -580,7 +635,7 @@ export class Client {
   // STANDARD SIMPLE LISTENERS
   private async preprocessMessage(message: Message) : Promise<Message> {
     if(this._createConfig.messagePreprocessor && MessagePreprocessors[this._createConfig.messagePreprocessor]) {
-      return await MessagePreprocessors[this._createConfig.messagePreprocessor](message, this)
+      return (await MessagePreprocessors[this._createConfig.messagePreprocessor](message, this) || message)
     }
     return message;
   }
@@ -591,7 +646,7 @@ export class Client {
    * @event 
    * @param fn callback
    * @param queueOptions PQueue options. Set to `{}` for default PQueue.
-   * @fires Observable stream of messages
+   * @fires [[Message]]
    */
    public async onMessage(fn: (message: Message) => void, queueOptions ?: Options<PriorityQueue, DefaultAddOptions>) : Promise<Listener | boolean> {
     const _fn = async (message : Message) => fn(await this.preprocessMessage(message))
@@ -612,7 +667,6 @@ export class Client {
   }
 
   /**
-   * [REQUIRES AN INSIDERS LICENSE-KEY](https://gum.co/open-wa?tier=Insiders%20Program)
    * 
    * Listens to when a message is deleted by a recipient or the host account
    * @event 
@@ -632,6 +686,16 @@ export class Client {
    */
   public async onChatDeleted(fn: (chat: Chat) => void) : Promise<Listener | boolean> {
     return this.registerListener(SimpleListener.ChatDeleted, fn);
+  }
+
+  /**
+   * Listens to button message responses
+   * @event 
+   * @param fn callback
+   * @fires [[Message]]
+   */
+   public async onButton(fn: (chat: Chat) => void) : Promise<Listener | boolean> {
+    return this.registerListener(SimpleListener.Button, fn);
   }
 
   /** 
@@ -733,7 +797,7 @@ export class Client {
    * @returns `true` if the callback was registered
    */
   public async onAck(fn: (message: Message) => void) : Promise<Listener | boolean> {
-    const _fn = async (message : Message) => fn(await this.preprocessMessage(message))
+    const _fn = async (message : Message) => fn(message)
     return this.registerListener(SimpleListener.Ack, _fn);
   }
 
@@ -1161,7 +1225,7 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
    * @param  {string} title The title/header of the buttons message
    * @param  {string} footer The footer of the buttons message
    */
-  public async sendButtons(to: ChatId, body : string, buttons : Button[], title ?: string, footer ?: string) : Promise<boolean | MessageId> {
+  public async sendButtons(to: ChatId, body : string, buttons : Button[], title : string, footer ?: string) : Promise<boolean | MessageId> {
     return await this.pup(
       ({ to,  body, buttons, title, footer }) => {
         return WAPI.sendButtons(to, body, buttons, title, footer);
@@ -1210,8 +1274,6 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
 
 
   /**
-   * [REQUIRES AN INSIDERS LICENSE-KEY](https://gum.co/open-wa?tier=Insiders%20Program)
-   * 
    * Sends a reply to given chat that includes mentions, replying to the provided replyMessageId.
    * In order to use this method correctly you will need to send the text like this:
    * "@4474747474747 how are you?"
@@ -1639,9 +1701,6 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
  */
   public async getMe() : Promise<any> {
     return await this._page.evaluate(() => WAPI.getMe());
-    // return await this.pup(() => WAPI.getMe());
-    //@ts-ignore
-    // return await this.pup(() => Store.Me.attributes);
   }
 
   /**
@@ -1718,6 +1777,7 @@ public async iAmAdmin() : Promise<GroupChatId[]>  {
   }
 
   /**
+   * @deprecated
    * Feature Currently only available with Premium License accounts.
    * 
    * Send a custom product to a chat. Please see [[CustomProduct]] for details.
@@ -1728,7 +1788,6 @@ public async iAmAdmin() : Promise<GroupChatId[]>  {
    * - This will only work if you have at least 1 product already in your catalog
    * - Only works on Business accounts
    */
-
    public async sendCustomProduct(to: ChatId, image: DataURL, productData: CustomProduct) : Promise<MessageId | boolean>  {
     return await this.pup(
       ({ to, image, productData }) => WAPI.sendCustomProduct(to, image, productData),
@@ -1869,13 +1928,13 @@ public async iAmAdmin() : Promise<GroupChatId[]>  {
  * Any potential abuse of this method will see it become paywalled.
  * @param to: Chat id to forward the message to
  * @param messageId: message id of the message to forward. Please note that if it is not loaded, this will return false - even if it exists.
- * @returns Promise<boolean>
+ * @returns Promise<MessageId | boolean>
  */
-  public async ghostForward(to: ChatId, messageId: MessageId) : Promise<boolean> {
+  public async ghostForward(to: ChatId, messageId: MessageId) : Promise<MessageId | boolean> {
     return await this.pup(
       ({ to, messageId }) => WAPI.ghostForward(to, messageId),
       { to, messageId }
-    ) as Promise<boolean>;
+    ) as Promise<MessageId | boolean>;
   }
 
   /**
@@ -2197,6 +2256,59 @@ public async contactUnblock(id: ContactId) : Promise<boolean> {
   }
 
   /**
+   * [REQUIRES AN INSIDERS LICENSE-KEY](https://gum.co/open-wa?tier=Insiders%20Program)
+   * 
+   * Edit a product in your catalog
+   * 
+   * @param {string} productId The catalog ID of the product
+   * @param {string} name The name of the product
+   * @param {number} price The price of the product
+   * @param {string} currency The 3-letter currenct code for the product
+   * @param {string[]} images An array of dataurl or base64 strings of product images, the first image will be used as the main image. At least one image is required.
+   * @param {string} description optional, the description of the product
+   * @param {string} url The url of the product for more information
+   * @param {string} internalId The internal/backoffice id of the product
+   * @param {boolean} isHidden Whether or not the product is shown publicly in your catalog
+   * @returns product object
+   */
+   public async editProduct(productId: string, name ?: string, price ?: number, currency ?: string, images ?: DataURL[], description ?: string, url ?: string, internalId ?: string, isHidden ?: boolean) : Promise<Product> {
+    return await this.pup(
+      ({productId, name, price, currency, images, description, url, internalId, isHidden}) => WAPI.editProduct(productId, name, price, currency, images, description, url, internalId, isHidden),
+      { productId, name, price, currency, images, description, url, internalId, isHidden }
+    ) as Promise<Product>;
+  }
+
+  /**
+   * [REQUIRES AN INSIDERS LICENSE-KEY](https://gum.co/open-wa?tier=Insiders%20Program)
+   * 
+   * Send a product to a chat
+   * 
+   * @param {string} chatId The chatId
+   * @param {string} productId The id of the product
+   * @returns MessageID
+   */
+   public async sendProduct(chatId: ChatId, productId : string ) : Promise<MessageId> {
+    return await this.pup(
+      ({ chatId, productId }) => WAPI.sendProduct( chatId, productId ),
+      { chatId, productId }
+    ) as Promise<MessageId>;
+  }
+
+  /**
+   * 
+   * Remove a product from the host account's catalog
+   * 
+   * @param {string} productId The id of the product
+   * @returns boolean
+   */
+   public async removeProduct(productId : string ) : Promise<boolean> {
+    return await this.pup(
+      ({ productId }) => WAPI.removeProduct( productId ),
+      { productId }
+    ) as Promise<boolean>;
+  }
+
+  /**
    * Retrieves the last message sent by the host account in any given chat or globally.
    * @param chatId This is optional. If no chat Id is set then the last message sent by the host account will be returned.
    * @returns message object
@@ -2386,14 +2498,46 @@ public async getStatus(contactId: ContactId) : Promise<{
 }
 
   /**
+   * 
+   * [REQUIRES AN INSIDERS LICENSE-KEY](https://gum.co/open-wa?tier=Insiders%20Program)
+   * 
+   * Use a Baileys payload within your open-wa session
+   * 
+   * @param chatId
+   * @param payload {any} 
+   * returns: MessageId
+   */
+   public async B(chatId: ChatId, payload: {
+     [k: string]: any
+   }) : Promise<MessageId>{
+    return await this.pup(
+      ({ chatId, payload }) => WAPI.B(chatId, payload),
+      { chatId, payload }
+    ) as Promise<MessageId>;
+  }
+  
+  /**
     * Load all messages in chat object from server.
    * @param contactId
-   * @returns contact detial as promise
+   * @returns Message[]
    */
-  public async loadAllEarlierMessages(contactId: ContactId) : Promise<Message>{
+  public async loadAllEarlierMessages(contactId: ContactId) : Promise<Message[]>{
     return await this.pup(
       contactId => WAPI.loadAllEarlierMessages(contactId),
       contactId
+    );
+  }
+
+  /**
+    * Load all messages until a given timestamp in chat object from server.
+   * @param contactId
+   * @param timestamp in seconds
+   * @returns Message[]
+   */
+  public async loadEarlierMessagesTillDate(contactId: ContactId, timestamp: number) : Promise<Message[]>{
+    return await this.pup(
+      ({contactId, timestamp}) => WAPI.loadEarlierMessagesTillDate(contactId, timestamp),
+      {contactId, timestamp}
     );
   }
 
@@ -2935,21 +3079,24 @@ public async getStatus(contactId: ContactId) : Promise<{
     if(func === 'convertMp4BufferToWebpDataUrl') fallback = true;
     const sessionInfo = this.getSessionInfo()
     sessionInfo.WA_AUTOMATE_VERSION = sessionInfo.WA_AUTOMATE_VERSION.split(' ')[0]
-    if(a.file || a.image) {
-      //check if its a local file:
-      const key = a.file ? 'file' : 'image';
-      if(!isDataURL(a[key]) && !isUrl(a[key]) && !isBase64(a[key])){
-        const relativePath = path.join(path.resolve(process.cwd(),a[key]|| ''));
-        if(fs.existsSync(a[key]) || fs.existsSync(relativePath)) {
-          a[key] = await datauri(fs.existsSync(a[key])  ? a[key] : relativePath);
-        } else {
-          console.error('FILE_NOT_FOUND')
-          throw new CustomError(ERROR_NAME.FILE_NOT_FOUND, 'FILE NOT FOUND')
+    if(a.file || a.image || a.emojiId) {
+      if(!a.emojiId) {
+        //check if its a local file:
+        const key = a.file ? 'file' : 'image';
+        if(!isDataURL(a[key]) && !isUrl(a[key]) && !isBase64(a[key])){
+          const relativePath = path.join(path.resolve(process.cwd(),a[key]|| ''));
+          if(fs.existsSync(a[key]) || fs.existsSync(relativePath)) {
+            a[key] = await datauri(fs.existsSync(a[key])  ? a[key] : relativePath);
+          } else {
+            console.error('FILE_NOT_FOUND')
+            throw new CustomError(ERROR_NAME.FILE_NOT_FOUND, 'FILE NOT FOUND')
+          }
         }
+        if(a?.stickerMetadata && typeof a?.stickerMetadata !== "object") throw new CustomError(ERROR_NAME.BAD_STICKER_METADATA, `Received ${typeof a?.stickerMetadata}: ${a?.stickerMetadata}`);
+      } 
+      if(a?.stickerMetadata?.discord && this._createConfig?.discord) {
+        a.stickerMetadata = {discord: this._createConfig.discord}
       }
-      if(a?.stickerMetadata && typeof a?.stickerMetadata !== "object") throw new CustomError(ERROR_NAME.BAD_STICKER_METADATA, `Received ${typeof a?.stickerMetadata}: ${a?.stickerMetadata}`);
-      // remvebg no longer limited to GCP
-      // if((a?.stickerMetadata as StickerMetadata)?.removebg) fallback = true;
       try {
         const {data} = await axios.post(`${((fallback ?  pkg.stickerUrl : 'https://open-wa-sticker-api.herokuapp.com')|| this._createConfig.stickerServerEndpoint).replace(/\/$/, '')}/${func}`, {
           ...a,
@@ -3065,6 +3212,24 @@ public async getStatus(contactId: ContactId) : Promise<{
       console.log(msg)
       throw new CustomError(ERROR_NAME.STICKER_TOO_LARGE,msg);
     }
+  }
+
+  /**
+   * Send a discord emoji to a chat as a sticker
+   * 
+   * @param to ChatId The chat id you want to send the webp sticker to
+   * @param emojiId The discord emoji id without indentifying chars. In discord you would write `:who:`, here use `who`
+   * @param messageId message id of the message you want this sticker to reply to. [REQUIRES AN INSIDERS LICENSE-KEY](https://gum.co/open-wa?tier=Insiders%20Program)
+   */
+  public async sendEmoji(to: ChatId, emojiId: string, messageId ?: MessageId) : Promise<MessageId | boolean | string> {
+    const webp = await this.stickerServerRequest('emoji', {
+      emojiId
+    });
+    if(webp) {
+      if(messageId) return await this.sendRawWebpAsStickerAsReply(to, messageId, webp, true) as MessageId
+     return await this.sendRawWebpAsSticker(to, webp,true) as MessageId
+    }
+    return false;
   }
 
   /**
@@ -3574,7 +3739,7 @@ public async getStatus(contactId: ContactId) : Promise<{
     return false;
   }
 
-  private prepEventData(data: any, event: SimpleListener, extras ?: any){
+  prepEventData(data: JsonObject, event: SimpleListener, extras ?: JsonObject) : EventPayload {
     const sessionId = this.getSessionId();
     return {
         ts: Date.now(),
@@ -3583,10 +3748,10 @@ public async getStatus(contactId: ContactId) : Promise<{
         event,
         data,
         ...extras
-    }
+    } as EventPayload
   }
 
-  private getEventSignature(simpleListener?: SimpleListener){
+  getEventSignature(simpleListener?: SimpleListener) : string{
     return `${simpleListener || '**'}.${this._createConfig.sessionId || 'session'}.${this._sessionInfo.INSTANCE_ID}`
   }
 

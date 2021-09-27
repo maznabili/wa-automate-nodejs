@@ -6,10 +6,14 @@ import robots from "express-robots-txt";
 import swaggerUi from 'swagger-ui-express';
 import { default as axios } from 'axios'
 import parseFunction from 'parse-function';
-import { Client, ev, SimpleListener } from '..';
+import { Client, ev, SimpleListener, ChatId } from '..';
+import qs from 'qs';
+import { convert } from 'xmlbuilder2';
 
 export const app = express();
 export const server = http.createServer(app);
+
+const trimChatId = (chatId : ChatId) => chatId.replace("@c.us","").replace("@g.us","")
 
 export type cliFlags = {
     [k : string] : number | string | boolean
@@ -31,6 +35,11 @@ export const setUpExpressApp : () => void = () => {
     //@ts-ignore
     app.use(express.json({ limit: '99mb' })) //add the limit option so we can send base64 data through the api
     setupMetaMiddleware();
+}
+
+export const enableCORSRequests : () => void = async () => {
+    const {default : cors} = await import('cors');
+    app.use(cors());
 }
 
 export const setupAuthenticationLayer : (cliConfig : cliFlags) => void = (cliConfig : cliFlags) => {
@@ -113,6 +122,13 @@ const setupMetaMiddleware = () => {
         if (!types.includes(coltype)) return res.status(404).send(`collection ${coltype} not found`)
         return res.send(collections[coltype.replace('.json', '')])
     })
+
+    /**
+     * Basic
+     */
+    app.get("/meta/basic/commands", (_, res) => res.send(getCommands()))
+    app.get("/meta/basic/listeners", (_, res) => res.send(listListeners()))
+    
     /**
      * If you want to list the list of all languages GET https://codegen.openwa.dev/api/gen/clients
      * 
@@ -139,9 +155,118 @@ const setupMetaMiddleware = () => {
     })
 }
 
+export const getCommands : () => any = () => Object.entries(collections['swagger'].paths).reduce((acc,[key,value])=>{acc[key.replace("/","")]=(value as any)?.post?.requestBody?.content["application/json"]?.example?.args || {};return acc},{})
+
+export const listListeners : () => string[] = () => {
+    return Object.keys(SimpleListener).map(eventKey => SimpleListener[eventKey])
+}
+
 
 export const setupMediaMiddleware : () => void = () => {
     app.use("/media", express.static('media'))
+}
+
+
+export const setupTwilioCompatibleWebhook : (cliConfig : cliFlags, client: Client) => void = (cliConfig : cliFlags, client: Client) => {
+    const url = cliConfig.twilioWebhook as string
+    client.onMessage(async message=>{
+        const waId = trimChatId(message.from)
+        const fd = {};
+        fd["To"] = `whatsapp:${trimChatId(message.to)}`
+        fd["AccountSid"] = trimChatId(message.to)
+        fd["WaId"] = waId
+        fd["ProfileName"] = message?.chat?.formattedTitle || ""
+        fd["SmsSid"] = message.id
+        fd["SmsMessageSid"] = message.id
+        fd["MessageSid"] = message.id
+        fd["NumSegments"] = "1"
+        fd["NumSegments"] = "1"
+        fd["Body"] = message.loc || message.body || message.caption || ""
+        fd["From"] = `whatsapp:${waId}`
+        if(message.mimetype) {
+            fd["MediaContentType0"] = message.mimetype || ""
+            fd["MediaUrl0"] = message.cloudUrl || ""
+            fd["NumMedia"] = "1"
+        }
+        if(message.lat) {
+            fd["Latitude"] = message.lat || ""
+            fd["Longitude"] = message.lng || ""
+        }
+        try {
+        const {data} =  await axios( {
+            method: 'post',
+            url,
+            data: qs.stringify(fd),
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          })
+          const obj : any = convert(data, { format: "object" });
+              const msg = obj.Response.Message;
+            //   const toId : string = msg['@to'].match(/\d*/g).filter(x=>x).join("-");
+            //   const to = `${toId}@${toId.includes("-") ? 'g' : 'c'}.us` as ChatId
+              if(msg.Media) {
+                  return await client.sendFile(message.from, msg.Media, `file.${msg.Media.split(/[#?]/)[0].split('.').pop().trim()}`, msg['#'] || "")
+              }
+              return await client.sendText(message.from, msg['#'])
+        } catch (error) {
+            console.error("TWILIO-COMPAT WEBHOOK ERROR", url, error.message)
+        }
+    })
+}
+
+export const setupBotPressHandler : (cliConfig : cliFlags, client: Client) => void = (cliConfig : cliFlags, client: Client) => {
+    const u = cliConfig.botPressUrl as string
+    const sendBotPressMessage = async (text:string, chatId : ChatId) => {
+    const url = `${u.split("/").slice(0,u.split("/").findIndex(x=>x=="converse")).join("/")}/converse/${chatId.replace("@c.us","").replace("@g.us","")}`
+        try {
+            const {data} =  await axios.post(url, {
+                "type": "text",
+                text
+              })
+            const {responses} = data;
+            return await Promise.all(responses.filter(({type})=>type!="typing").map((response : any) => {
+                if(response.type=="text"){
+                    return client.sendText(chatId, response.text)
+                }
+                if(response.type=="file"){
+                    return client.sendFile(chatId, response.url, `file.${response.url.split(/[#?]/)[0].split('.').pop().trim()}`, response.title || "")
+                }
+                if(response.type=="custom"){
+                    if(response["quick_replies"] && response["quick_replies"].length >= 1 && response["quick_replies"].length <= 3){
+                        return client.sendButtons(chatId, response.wrapped.text , response["quick_replies"].map(qr=>{
+                            return {
+                                id: qr.payload,
+                                text: qr.title
+                            }
+                        }),"")
+                    }
+                }
+            }))
+        } catch (error) {
+            console.error("BOTPRESS API ERROR", url, error.message)
+        }
+    }
+    client.onMessage(async message=>{
+            let text = message.body;
+            switch(message.type) {
+                case 'location':
+                    text = `${message.lat},${message.lng}`;
+                    break;
+                case 'buttons_response':
+                    text = message.selectedButtonId;
+                    break;
+                case 'document':
+                case 'image':
+                case 'audio':
+                case 'ptt':
+                case 'video':
+                    if(message.cloudUrl) text = message.cloudUrl;
+                    break;
+                default:
+                    text = message.body;
+                    break;
+            }
+            await sendBotPressMessage(text, message.from)
+    })
 }
 
 export const setupSocketServer : (cliConfig, client : Client) => Promise<void> = async (cliConfig, client : Client) => {
@@ -167,11 +292,11 @@ export const setupSocketServer : (cliConfig, client : Client) => Promise<void> =
             const objs = args.filter(arg => typeof arg === "object")
             if(m==="node_red_init_call"){
                 if(!collections['swagger']) return callbacks[0]();
-                return callbacks[0](Object.entries(collections['swagger'].paths).reduce((acc,[key,value])=>{acc[key.replace("/","")]=(value as any)?.post?.requestBody?.content["application/json"]?.example?.args || {};return acc},{}))
+                return callbacks[0](getCommands())
             }
 
             if(m==="node_red_init_listen"){
-                return callbacks[0](Object.keys(SimpleListener).map(eventKey => SimpleListener[eventKey]))
+                return callbacks[0](listListeners())
             }
 
             

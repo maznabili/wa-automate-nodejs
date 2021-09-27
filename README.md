@@ -15,14 +15,16 @@
 
 <a href="https://discord.gg/dnpp72a"><img src="https://img.shields.io/discord/661438166758195211?color=blueviolet&label=discord&style=flat" /></a> ![WhatsApp_Web 2.2108.8](https://img.shields.io/badge/WhatsApp_Web-2.2108.8-brightgreen.svg)<img alt="Twitter Follow" src="https://img.shields.io/twitter/follow/openwadev?label=Follow%20%40openwadev%20for%20updates&logo=twitter&style=social">
 
-[![Deploy](https://deploy.zeet.co/wa-automate.svg?)](https://deploy.zeet.co/wa-automate)
+<a href="https://cloud.digitalocean.com/apps/new?repo=https://github.com/open-wa/wa-automate-nodejs/tree/deploy&refcode=4b093f6ecd3a&utm_campaign=Referral_Invite&utm_medium=Referral_Program&utm_source=badge">
+ <img style="max-height:200px" src="https://raw.githubusercontent.com/open-wa/wa-automate-deploy-heroku/main/assets/do_deploy.png" alt="Deploy to DO">
+</a>
 
 
 <p align="center">
   <a href="#functions-list">Key Features</a> •
   <a href="https://docs.openwa.dev/pages/Getting%20Started/installation.html">Getting Started</a> •
   <a href="https://docs.openwa.dev/pages/Getting%20Started/quick-run.html">Easy API</a> •
-  <a href="https://docs.openwa.dev/classes/api_client.client.html">Documentation</a> •
+  <a href="https://docs.openwa.dev/classes/api_Client.Client.html">Documentation</a> •
   <a href="https://openwa.page.link/key">Get a License Key</a> •
   <a href="#support">Support</a>
 </p>
@@ -56,7 +58,7 @@ function start(client) {
 
 ## Custom Setup
 
-Learn more about all possible configuration options here: [ConfigObject](https://docs.openwa.dev/interfaces/api_model.configobject.html)
+Learn more about all possible configuration options here: [ConfigObject](https://docs.openwa.dev/interfaces/api_model_config.ConfigObject.html)
 
 ```javascript
 const wa = require('@open-wa/wa-automate');
@@ -107,35 +109,35 @@ With the constant updates from WA. It is advisable to always use the latest vers
 
 | Function                          | Reference |
 | --------------------------------- | ----------- |
-| Receive message                   | [onMessage](https://docs.openwa.dev/classes/api_client.client.html#onmessage)
-| Automatic QR Refresh              | [autoRefresh](https://docs.openwa.dev/classes/api_client.client.html#autorefresh)
-| Send text                         | [sendText](https://docs.openwa.dev/classes/api_client.client.html#sendtext)
-| Get contacts                      | [getContact](https://docs.openwa.dev/classes/api_client.client.html#getcontact)
-| Get chats                         | [getAllChats](https://docs.openwa.dev/classes/api_client.client.html#getallchats)
-| Get groups                        | [getAllGroups](https://docs.openwa.dev/classes/api_client.client.html#getallgroups)
-| Get group members                 | [getGroupMembersId](https://docs.openwa.dev/classes/api_client.client.html#getgroupMembersId)
-| Send contact                      | [sendContact](https://docs.openwa.dev/classes/api_client.client.html#sendcontact)
-| Send Images (image)              | [sendImage](https://docs.openwa.dev/classes/api_client.client.html#sendimage)
-| Send media (audio, doc) | [sendFile](https://docs.openwa.dev/classes/api_client.client.html#sendfile)
+| Receive message                   | [onMessage](https://docs.openwa.dev/classes/api_Client.Client.html#onMessage)
+| Automatic QR Refresh              | [autoRefresh](https://docs.openwa.dev/classes/api_Client.Client.html#autoRefresh)
+| Send text                         | [sendText](https://docs.openwa.dev/classes/api_Client.Client.html#sendText)
+| Get contacts                      | [getContact](https://docs.openwa.dev/classes/api_Client.Client.html#getContact)
+| Get chats                         | [getAllChats](https://docs.openwa.dev/classes/api_Client.Client.html#getAllChats)
+| Get groups                        | [getAllGroups](https://docs.openwa.dev/classes/api_Client.Client.html#getAllGroups)
+| Get group members                 | [getGroupMembersId](https://docs.openwa.dev/classes/api_Client.Client.html#getGroupMembersId)
+| Send contact                      | [sendContact](https://docs.openwa.dev/classes/api_Client.Client.html#sendContact)
+| Send Images (image)              | [sendImage](https://docs.openwa.dev/classes/api_Client.Client.html#sendImage)
+| Send media (audio, doc) | [sendFile](https://docs.openwa.dev/classes/api_Client.Client.html#sendFile)
 | Send media (video)  | [Send Videos](https://docs.openwa.dev/pages/How%20to/send-files/send-videos.html)
-| Send stickers                     | [sendStickerfromUrl](https://docs.openwa.dev/classes/api_client.client.html#sendstickerfromurl)
+| Send stickers                     | [sendStickerfromUrl](https://docs.openwa.dev/classes/api_Client.Client.html#sendStickerFromuUrl)
 | Decrypt media (image, audio, doc) | [Decrypt Media](https://docs.openwa.dev/pages/How%20to/decrypt-media.html)
 | Capturing QR Code                 | [Capturing QR Code](https://docs.openwa.dev/pages/The%20Client/launch-events/capture-qr.html)
 | Multiple Sessions                 | [Multiple Sessions](https://docs.openwa.dev/pages/The%20Client/the-client/multiple-sessions.html)
-| Last seen      | [getLastSeen](https://docs.openwa.dev/classes/api_client.client.html#getlastseen)
-| isOnline      | [isChatOnline](https://docs.openwa.dev/classes/api_client.client.html#ischatonline)
-| 📍 Send Location      | [sendLocation](https://docs.openwa.dev/classes/api_client.client.html#sendlocation)
-| Simulated '...typing'             | [simulateTyping](https://docs.openwa.dev/classes/api_client.client.html#simulatetyping)
-| Send GIFs!                       | [sendVideoAsGif](https://docs.openwa.dev/classes/api_client.client.html#sendvideoasgif)
-| Send Giphy!                       | [sendGiphy](https://docs.openwa.dev/classes/api_client.client.html#sendgiphy)
-| Forward Messages                  | [forwardMessages](https://docs.openwa.dev/classes/api_client.client.html#forwardmessages)
-| Listen to Read Receipts           | [onAck](https://docs.openwa.dev/classes/api_client.client.html#onack)
-| Listen to Live Locations           | [onLiveLocation](https://docs.openwa.dev/classes/api_client.client.html#onlivelocation)
-| Group participant changes         | [onParticipantsChanged](https://docs.openwa.dev/classes/api_client.client.html#onparticipantschanged)
+| Last seen      | [getLastSeen](https://docs.openwa.dev/classes/api_Client.Client.html#getLastSeen)
+| isOnline      | [isChatOnline](https://docs.openwa.dev/classes/api_Client.Client.html#isChatOnline)
+| 📍 Send Location      | [sendLocation](https://docs.openwa.dev/classes/api_Client.Client.html#sendLocation)
+| Simulated '...typing'             | [simulateTyping](https://docs.openwa.dev/classes/api_Client.Client.html#simulateTyping)
+| Send GIFs!                       | [sendVideoAsGif](https://docs.openwa.dev/classes/api_Client.Client.html#sendVideoAsGif)
+| Send Giphy!                       | [sendGiphy](https://docs.openwa.dev/classes/api_Client.Client.html#sendGiphy)
+| Forward Messages                  | [forwardMessages](https://docs.openwa.dev/classes/api_Client.Client.html#forwardMessages)
+| Listen to Read Receipts           | [onAck](https://docs.openwa.dev/classes/api_Client.Client.html#onAck)
+| Listen to Live Locations           | [onLiveLocation](https://docs.openwa.dev/classes/api_Client.Client.html#onLiveLocation)
+| Group participant changes         | [onParticipantsChanged](https://docs.openwa.dev/classes/api_Client.Client.html#onParticipantsChanged)
 | Create Groups         | [Create Group](https://docs.openwa.dev/pages/How%20to/groups.html#create-a-group)
 | add, remove, promote, demote participants        | [Manage Participants](https://docs.openwa.dev/pages/How%20to/groups/manage-participants.html)
 
-[Checkout all the available functions here.](https://docs.openwa.dev/classes/api_client.client.html)
+[Checkout all the available functions here.](https://docs.openwa.dev/classes/api_Client.Client.html)
 
 ## Running the demo
 

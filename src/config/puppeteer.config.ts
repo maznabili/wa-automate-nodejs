@@ -38,7 +38,8 @@ const puppeteerConfig = {
     '--disable-app-list-dismiss-on-blur',
     '--disable-accelerated-video-decode',
     '--disable-dev-shm-usage',
-    '--incognito',
+    '--js-flags=--expose-gc',
+    // '--incognito',
     //suggested in #563
     // '--single-process',
     // '--no-zygote',

@@ -6,7 +6,7 @@ import * as crypto from 'crypto';
 import { Client } from '../api/Client';
 import { ConfigObject, SessionExpiredError } from '../api/model/index';
 import * as path from 'path';
-import { phoneIsOutOfReach, isAuthenticated, smartQr } from './auth';
+import { phoneIsOutOfReach, isAuthenticated, smartQr, waitForRipeSession } from './auth';
 import { deleteSessionData, initPage, injectApi } from './browser';
 import { Spin } from './events'
 import { integrityCheck, checkWAPIHash } from './launch_checks';
@@ -18,6 +18,7 @@ import { Page } from 'puppeteer';
 import { createHash } from 'crypto';
 import { injectInitPatch } from './init_patch';
 import { readJsonSync } from 'fs-extra'
+import { upload } from 'pico-s3';
 
 const pkg = readJsonSync(path.join(__dirname,'../../package.json')),
 configWithCases = readJsonSync(path.join(__dirname,'../../bin/config-schema.json')),
@@ -151,8 +152,8 @@ export async function create(config: ConfigObject = {}): Promise<Client> {
     await waPage.waitForFunction('window.Debug!=undefined && window.Debug.VERSION!=undefined');
     //@ts-ignore
     const WA_VERSION = await waPage.evaluate(() => window.Debug ? window.Debug.VERSION : 'I think you have been TOS_BLOCKed')
-    //@ts-ignore
-    const canInjectEarly = await waPage.evaluate(() => { if(window.webpackChunkwhatsapp_web_client) {window.webpackChunkbuild = window.webpackChunkwhatsapp_web_client} else {(function(){const f = Object.entries(window).filter(([,o])=>o && o.push && (o.push != [].push));if(f[0]) {window.webpackChunkbuild = window[f[0][0]]}})()} return (typeof webpackChunkbuild !== "undefined") });
+    const canInjectEarly = await earlyInjectionCheck(waPage as Page)
+    const attemptingReauth = await waPage.evaluate(`!!(localStorage['WAToken2'] || localStorage['last-wid-md'])`)
     let debugInfo : SessionInfo = {
       WA_VERSION,
       PAGE_UA,
@@ -167,6 +168,7 @@ export async function create(config: ConfigObject = {}): Promise<Client> {
      spinner.succeed('Use this easy pre-filled link to report an issue: ' + `https://github.com/open-wa/wa-automate-nodejs/issues/new?template=bug_report.yaml&debug_info=${encodeURI(JSON.stringify((({ OS, PAGE_UA, ...o }) => o)(debugInfo) ,null,2))}&environment=${`-%20OS:%20${encodeURI(debugInfo.OS)}%0A-%20Node:%20${encodeURI(process.versions.node)}%0A-%20npm:%20%0A`}`);
 
     if (canInjectEarly) {
+      if(attemptingReauth) await waPage.evaluate(`window.Store = {"Msg": true}`)
       spinner.start('Injecting api');
       waPage = await injectApi(waPage);
       spinner.start('WAPI injected');
@@ -179,11 +181,11 @@ export async function create(config: ConfigObject = {}): Promise<Client> {
     const authRace = [];
     authRace.push(isAuthenticated(waPage).catch(()=>{}))
     if (config?.authTimeout!==0) {
-      authRace.push(timeout((config.authTimeout || 60) * 1000))
+      authRace.push(timeout((config.authTimeout || config.multiDevice ? 120 : 60) * 1000))
     }
 
     const authenticated = await Promise.race(authRace);
-    if(authenticated==='NUKE') {
+    if(authenticated==='NUKE' && !config?.ignoreNuke) {
       //kill the browser
       spinner.fail("Session data most likely expired due to manual host account logout. Please re-authenticate this session.")
       await kill(waPage)
@@ -236,6 +238,12 @@ export async function create(config: ConfigObject = {}): Promise<Client> {
       spinner.emit('successfulScan');
       spinner.succeed();
     }
+    if(attemptingReauth) {
+      await waPage.evaluate("window.Store = undefined")
+      spinner.start("Waiting for ripe session...")
+      if(await waitForRipeSession(waPage)) spinner.succeed("Session ready for injection");
+      else spinner.fail("You may experience issues in headless mode. Continuing...")
+    }
     const pre = canInjectEarly ? 'Rei' : 'I';
     spinner.start(`${pre}njecting api`);
     waPage = await injectApi(waPage);
@@ -275,6 +283,20 @@ export async function create(config: ConfigObject = {}): Promise<Client> {
       if(!config?.skipSessionSave) fs.writeFile(sessionjsonpath, sdB64, (err) => {
         if (err) { console.error(err); return; }
       });
+      if(config?.sessionDataBucketAuth) {
+        try {
+          spinner?.info('Uploading new session data to cloud storage..')
+          await upload({
+            directory: '_sessionData',
+            ...JSON.parse(Buffer.from(config.sessionDataBucketAuth, 'base64').toString('ascii')),
+            filename: `${config.sessionId || 'session'}.data.json`,
+            file: `data:text/plain;base64,${Buffer.from(sdB64).toString('base64')}`
+          })
+          spinner?.succeed('Successfully uploaded session data file to cloud storage!')
+        } catch (error) {
+          spinner?.fail(`Something went wrong while uploading new session data to cloud storage bucket. Continuing...`)
+        }
+      }
       if (config?.logConsole) waPage.on('console', msg => console.log(msg));
       if (config?.logConsoleErrors) waPage.on('error', error => console.log(error));
       if (config?.restartOnCrash) waPage.on('error', async error => {
@@ -301,8 +323,10 @@ export async function create(config: ConfigObject = {}): Promise<Client> {
       const LAUNCH_TIME_MS = Date.now() - START_TIME;
       debugInfo = {...debugInfo, LAUNCH_TIME_MS};
       spinner.emit(debugInfo, "DebugInfo");
-      const metrics = await waPage.evaluate(`WAPI.launchMetrics()`);
-      spinner.succeed(`Client loaded with ${metrics.contacts} contacts, ${metrics.chats} chats & ${metrics.messages} messages in ${LAUNCH_TIME_MS/1000}s`);
+      //@ts-ignore
+      const metrics = await waPage.evaluate(({config}) => WAPI.launchMetrics(config), {config});
+      const purgedMessage = metrics?.purged ? Object.entries(metrics.purged).filter(([,e])=>e>0).map(([k,e])=>`${e} ${k}`).join(" and ") : ""
+      spinner.succeed(`Client loaded for ${metrics.isBiz ? "business" : "normal"} account with ${metrics.contacts} contacts, ${metrics.chats} chats & ${metrics.messages} messages ${purgedMessage ? `+ purged ${purgedMessage} ` : ``}in ${LAUNCH_TIME_MS/1000}s`);
       if(config?.deleteSessionDataOnLogout || config?.killClientOnLogout) config.eventMode = true;
       const client = new Client(waPage, config, debugInfo);
       const { me } = await client.getMe();
@@ -310,9 +334,14 @@ export async function create(config: ConfigObject = {}): Promise<Client> {
          await getAndInjectLicense(waPage, config, me, debugInfo, spinner, me._serialized!==earlyWid ? false : await licensePromise)
       }
       await injectInitPatch(waPage)
+      await client.loaded();
+      if(config.ensureHeadfulIntegrity && !attemptingReauth) {
+        spinner.info("QR scanned for the first time. Refreshing...")
+        await client.refresh();
+        spinner.info("Session refreshed.")
+      }
       spinner.succeed(`🚀 @OPEN-WA ready for account: ${me.user.slice(-4)}`);
       spinner.emit('SUCCESS');
-      await client.loaded();
       spinner.remove();
       return client;
     }
@@ -419,7 +448,7 @@ export async function getLicense(config: ConfigObject, me : {
   if(!axios) axios = await import('axios');
   const hasSpin = !!spinner;
   if(!spinner) spinner = new Spin(config.sessionId || "session", "FETCH_LICENSE", config.disableSpins,true)
-  spinner?.start('Fetching License', hasSpin ? undefined : 2)
+  spinner?.start(`Fetching License: ${Array.isArray(config.licenseKey) ? config.licenseKey : config.licenseKey.indexOf("-")==-1 ? config.licenseKey.slice(-4) : config.licenseKey.split("-").slice(-1)[0]}`, hasSpin ? undefined : 2)
   try {
   const START = Date.now()
   const { data } = await axios.post(pkg.licenseCheckUrl, { key: config.licenseKey, number: me._serialized, ...debugInfo });
@@ -427,9 +456,14 @@ export async function getLicense(config: ConfigObject, me : {
   spinner?.succeed(`Downloaded License in ${(END-START)/1000}s`)
   return data;
   } catch (error) {
-    spinner?.fail(`License request failed: ${error.statusCode || error.code || error.message}`);
+    spinner?.fail(`License request failed: ${error.statusCode || error.status || error.code} ${error.message}`);
     return false;
   }
+}
+
+export async function earlyInjectionCheck(page: Page) : Promise<(page: Page) => boolean> {
+    //@ts-ignore
+  return await page.evaluate(() => { if(window.webpackChunkwhatsapp_web_client) {window.webpackChunkbuild = window.webpackChunkwhatsapp_web_client} else {(function(){const f = Object.entries(window).filter(([,o])=>o && o.push && (o.push != [].push));if(f[0]) {window.webpackChunkbuild = window[f[0][0]]}})()} return (typeof webpackChunkbuild !== "undefined") });
 }
 
 export async function getAndInjectLicense(page: Page, config: ConfigObject, me : {
@@ -441,12 +475,18 @@ export async function getAndInjectLicense(page: Page, config: ConfigObject, me :
   let data = preloadedLicense;
   spinner?.info('Checking License')
   try {
-    if(!data) data = await getLicense(config, me, debugInfo, spinner)
+    if(!data) {
+      spinner?.info('Fethcing License...')
+      data = await getLicense(config, me, debugInfo, spinner)
+    }
   if (data) {
+    spinner?.info('Injecting License...')
     const l_success = await page.evaluate(data => eval(data), data);
     if(!l_success) {
+      spinner?.info('License injection failed. Getting error..')
       l_err = await page.evaluate('window.launchError');
     } else {
+      spinner?.info('License injected successfully..')
       const keyType = await page.evaluate('window.KEYTYPE || false');
       spinner?.succeed(`License Valid${keyType?`: ${keyType}`:''}`);
       return true;
@@ -457,7 +497,7 @@ export async function getAndInjectLicense(page: Page, config: ConfigObject, me :
   }
   return false;
   } catch (error) {
-    spinner?.fail(`License request failed: ${error.statusCode || error.code || error.message}`);
+    spinner?.fail(`License request failed: ${error.statusCode || error.status || error.code} ${error.message}`);
     return false;
   }
 }
