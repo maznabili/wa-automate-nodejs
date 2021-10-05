@@ -123,6 +123,8 @@ export async function create(config: ConfigObject = {}): Promise<Client> {
     spinner.start('Starting');
     spinner.succeed(`Version: ${pkg.version}`);
     spinner.info(`Initializing WA`);
+    if(config?.multiDevice && config?.chromiumArgs) spinner.info(`Using custom chromium args with multi device will cause issues! Please remove themm`);
+    if(config?.multiDevice && !config?.useChrome) spinner.info(`It is recommended to set useChrome: true or use the --use-chrome flag if you are experiencing issues with Multi device support`);
     waPage = await initPage(sessionId, config, customUserAgent, spinner);
     spinner.succeed('Browser Launched');
     const throwOnError = config && config.throwErrorOnTosBlock == true;
@@ -241,8 +243,10 @@ export async function create(config: ConfigObject = {}): Promise<Client> {
     if(attemptingReauth) {
       await waPage.evaluate("window.Store = undefined")
       spinner.start("Waiting for ripe session...")
-      if(await waitForRipeSession(waPage)) spinner.succeed("Session ready for injection");
-      else spinner.fail("You may experience issues in headless mode. Continuing...")
+      if(config?.waitForRipeSession) {
+        if(await waitForRipeSession(waPage)) spinner.succeed("Session ready for injection");
+        else spinner.fail("You may experience issues in headless mode. Continuing...")
+      }
     }
     const pre = canInjectEarly ? 'Rei' : 'I';
     spinner.start(`${pre}njecting api`);
@@ -353,6 +357,9 @@ export async function create(config: ConfigObject = {}): Promise<Client> {
   } catch (error) {
     spinner.emit(error.message);
     await kill(waPage);
+    if(error.name === "TimeoutError" && config?.multiDevice){
+      spinner.fail(`Please delete the ${config?.userDataDir} folder and any related data.json files and try again. It is highly suggested to set useChrome: true also.`)
+    }
     if(error.name === "TimeoutError" && config?.killProcessOnTimeout) {
       process.exit()
     } else {
